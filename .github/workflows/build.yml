@@ -12,12 +12,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '18'
-      - name: Install dependencies
+      - name: Install deps
         run: npm install --legacy-peer-deps
-      - name: Setup EAS
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Install Expo CLI
+        run: npm install -g @expo/cli
+      - name: Prebuild
+        run: npx expo prebuild --platform android --no-install
       - name: Build APK
-        run: EAS_SKIP_AUTO_FINGERPRINT=1 eas build --platform android --profile preview --non-interactive --no-wait
+        run: cd android && ./gradlew assembleRelease
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfc-tuneless.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
