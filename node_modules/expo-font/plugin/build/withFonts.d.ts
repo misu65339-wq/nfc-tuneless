@@ -1,4 +1,4 @@
-import { type ConfigPlugin } from 'expo/config-plugins';
+import { ConfigPlugin } from 'expo/config-plugins';
 export type FontProps = {
     fonts?: string[];
     android?: {

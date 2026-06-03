@@ -3,11 +3,26 @@
     "name": "NFC Tuneless",
     "slug": "nfc-tuneless",
     "version": "2.0.0",
-    "platforms": ["android"],
+    "platforms": [
+      "android"
+    ],
     "android": {
       "package": "com.nfctuneless.app",
-      "permissions": ["android.permission.NFC","android.permission.INTERNET"]
+      "permissions": [
+        "android.permission.NFC",
+        "android.permission.INTERNET"
+      ]
     },
-    "plugins": ["expo-router"]
+    "plugins": [
+      "expo-router"
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "986f3624-6510-4ed7-9fbc-92f2bb7f9fbb"
+      }
+    }
   }
 }
