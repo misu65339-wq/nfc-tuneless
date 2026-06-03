@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "NFC Tuneless",
+    "slug": "nfc-tuneless",
+    "version": "2.0.0",
+    "platforms": ["android"],
+    "android": {
+      "package": "com.nfctuneless.app",
+      "permissions": ["android.permission.NFC","android.permission.INTERNET"]
+    },
+    "plugins": ["expo-router"]
+  }
+}
