@@ -15,7 +15,7 @@ const ws=useRef(null);const pending=useRef({});
 const[nfcOk,setNfcOk]=useState(false);const[nfcOn,setNfcOn]=useState(false);
 const[autoScan,setAutoScan]=useState(false);const[scanning,setScanning]=useState(false);
 const loopRef=useRef(false);const lastTagRef=useRef('');
-const[url,setUrl]=useState('wss://gst-certified-medicine-transactions.trycloudflare.com');
+const[url,setUrl]=useState('wss://nfctuneless.serveousercontent.com');
 const[st,setSt]=useState('disconnected');const[myId,setMyId]=useState(null);
 const[clients,setClients]=useState([]);const[events,setEvents]=useState([]);
 const[tags,setTags]=useState([]);const[role,setRole]=useState('both');
