@@ -5,7 +5,7 @@ import NfcManager,{NfcTech}from'react-native-nfc-manager';
 const C={bg0:'#03060A',bg1:'#080F18',bg2:'#0D1A2A',b1:'#1A2E45',b2:'#1F3A55',c1:'#00D4FF',c2:'#FF6600',c3:'#39FF14',c4:'#FF2D78',c5:'#A855F7',t1:'#E2EEF9',t2:'#7FA8CC',t3:'#3D6080'};
 const TABS=['CONECTARE','TAG READER','APDU','HCE'];
 const PRESETS=[{n:'SELECT PPSE',v:'00A404000E325041592E5359532E444446303100'},{n:'SELECT VISA',v:'00A4040007A0000000031010'},{n:'SELECT MC',v:'00A4040007A0000000041010'},{n:'GET PROC OPT',v:'80A8000002830000'},{n:'READ REC 1',v:'00B2010C00'},{n:'GET CHALLENGE',v:'0084000008'}];
-const PIN_SERVER_URL='wss://gst-certified-medicine-transactions.trycloudflare.com';
+
 function bH(b=[]){return Array.from(b).map(x=>(x&0xFF).toString(16).toUpperCase().padStart(2,'0')).join('')}
 function hB(h=''){const c=h.replace(/\s/g,'');return Array.from({length:c.length/2},(_,i)=>parseInt(c.substring(i*2,i*2+2),16))}
 function fT(ts){const d=new Date(ts);return`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`}
@@ -71,24 +71,10 @@ s.onmessage=(e)=>{try{hMsg(JSON.parse(e.data));}catch{}};
 },[url,role,addEv]);
 const connectWithPin=useCallback(()=>{
 if(pinInput.length!==6){Alert.alert('PIN invalid','Introduceti 6 cifre!');return;}
-const s=new WebSocket(PIN_SERVER_URL);
-s.onopen=()=>{s.send(JSON.stringify({type:'GET_PIN'}));};
-s.onmessage=(e)=>{
-try{const m=JSON.parse(e.data);
-if(m.type==='PIN_INFO'){
-if(m.pin===pinInput){
-s.close();
-setUrl(m.url||PIN_SERVER_URL);
+connect(url);
 setShowConnectPin(false);
 setPinInput('');
-setTimeout(()=>connect(m.url||PIN_SERVER_URL),500);
-Alert.alert('✅ PIN Corect!','Conectare la server...');
-}else{Alert.alert('❌ PIN Greșit','Verificati codul PIN!');}
-}}catch{}
-s.close();
-};
-s.onerror=()=>{Alert.alert('Eroare','Nu se poate verifica PIN-ul.');s.close();};
-},[pinInput,connect]);
+},[pinInput,connect,url]);
 const hMsg=useCallback((m)=>{
 switch(m.type){
 case 'CONNECTED':setMyId(m.clientId);if(m.pin)setServerPin(m.pin);break;
