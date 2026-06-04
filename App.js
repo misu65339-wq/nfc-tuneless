@@ -1,51 +1,65 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Switch, StatusBar, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import NfcManager, { NfcTech } from 'react-native-nfc-manager';
+import{useState,useRef,useEffect,useCallback}from'react';
+import{View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,Switch,StatusBar,Alert}from'react-native';
+import{SafeAreaView}from'react-native-safe-area-context';
+import NfcManager,{NfcTech}from'react-native-nfc-manager';
 const C={bg0:'#03060A',bg1:'#080F18',bg2:'#0D1A2A',b1:'#1A2E45',b2:'#1F3A55',c1:'#00D4FF',c2:'#FF6600',c3:'#39FF14',c4:'#FF2D78',c5:'#A855F7',t1:'#E2EEF9',t2:'#7FA8CC',t3:'#3D6080'};
 const TABS=['CONECTARE','TAG READER','APDU','HCE'];
 const PRESETS=[{n:'SELECT PPSE',v:'00A404000E325041592E5359532E444446303100'},{n:'SELECT VISA',v:'00A4040007A0000000031010'},{n:'SELECT MC',v:'00A4040007A0000000041010'},{n:'GET PROC OPT',v:'80A8000002830000'},{n:'READ REC 1',v:'00B2010C00'},{n:'GET CHALLENGE',v:'0084000008'}];
-function bHex(b=[]){return Array.from(b).map(x=>(x&0xFF).toString(16).toUpperCase().padStart(2,'0')).join('')}
-function hBytes(h=''){const c=h.replace(/\s/g,'');return Array.from({length:c.length/2},(_,i)=>parseInt(c.substring(i*2,i*2+2),16))}
+function bH(b=[]){return Array.from(b).map(x=>(x&0xFF).toString(16).toUpperCase().padStart(2,'0')).join('')}
+function hB(h=''){const c=h.replace(/\s/g,'');return Array.from({length:c.length/2},(_,i)=>parseInt(c.substring(i*2,i*2+2),16))}
 function fT(ts){const d=new Date(ts);return`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`}
 export default function App(){
 const[tab,setTab]=useState(0);
 const ws=useRef(null);const pending=useRef({});
-const[nfcOk,setNfcOk]=useState(false);const[nfcOn,setNfcOn]=useState(false);const[scan,setScan]=useState(false);
-const[url,setUrl]=useState('ws://192.168.1.100:8080');const[st,setSt]=useState('disconnected');const[myId,setMyId]=useState(null);
-const[clients,setClients]=useState([]);const[events,setEvents]=useState([]);const[tags,setTags]=useState([]);const[role,setRole]=useState('both');
+const[nfcOk,setNfcOk]=useState(false);const[nfcOn,setNfcOn]=useState(false);
+const[autoScan,setAutoScan]=useState(false);const[scanning,setScanning]=useState(false);
+const loopRef=useRef(false);const lastTagRef=useRef('');
+const[url,setUrl]=useState('ws://192.168.1.100:8080');const[st,setSt]=useState('disconnected');
+const[myId,setMyId]=useState(null);const[clients,setClients]=useState([]);
+const[events,setEvents]=useState([]);const[tags,setTags]=useState([]);const[role,setRole]=useState('both');
 const[tCnt,setTCnt]=useState(0);const[aCnt,setACnt]=useState(0);
-const[aTgt,setATgt]=useState('');const[aCmd,setACmd]=useState('');const[aRsp,setARsp]=useState('--');const[aLoad,setALoad]=useState(false);const[aSt,setASt]=useState('');
-const[hOn,setHOn]=useState(false);const[hMode,setHMode]=useState(0);const[hCust,setHCust]=useState('9000');const[hLog,setHLog]=useState([]);const[hSt,setHSt]=useState({t:0,s:0,o:0});
-useEffect(()=>{(async()=>{try{const ok=await NfcManager.isSupported();setNfcOk(ok);if(ok){await NfcManager.start();setNfcOn(await NfcManager.isEnabled())}}catch(e){}})();return()=>{NfcManager.cancelTechnologyRequest().catch(()=>{})};},[]);
+const[aTgt,setATgt]=useState('');const[aCmd,setACmd]=useState('');
+const[aRsp,setARsp]=useState('--');const[aLoad,setALoad]=useState(false);const[aSt,setASt]=useState('');
+const[hOn,setHOn]=useState(false);const[hMode,setHMode]=useState(0);const[hCust,setHCust]=useState('9000');
+const[hLog,setHLog]=useState([]);const[hSt,setHSt]=useState({t:0,s:0,o:0});
+useEffect(()=>{(async()=>{try{const ok=await NfcManager.isSupported();setNfcOk(ok);if(ok){await NfcManager.start();setNfcOn(await NfcManager.isEnabled())}}catch(e){}})();return()=>{loopRef.current=false;NfcManager.cancelTechnologyRequest().catch(()=>{})};},[]);
 const addEv=useCallback((ev)=>{setEvents(p=>[{...ev,ts:Date.now()},...p].slice(0,200));},[]);
-const startScan=useCallback(async()=>{
-if(!nfcOk){Alert.alert('NFC','NFC nesupport!');return;}
-if(!nfcOn){Alert.alert('NFC','Activati NFC din Setari!');return;}
-setScan(true);
+const scanOnce=useCallback(async()=>{
 try{
 await NfcManager.requestTechnology([NfcTech.IsoDep,NfcTech.NfcA,NfcTech.NfcB,NfcTech.Ndef,NfcTech.MifareClassic,NfcTech.MifareUltralight]);
 const tag=await NfcManager.getTag();
 if(!tag)return;
-const tagId=bHex(tag.id||[]);
+const tagId=bH(tag.id||[]);
+if(tagId===lastTagRef.current){return;}
+lastTagRef.current=tagId;
+setTimeout(()=>{lastTagRef.current='';},3000);
 const techs=tag.techTypes||[];
 let tech=techs[0]?.split('.').pop()||'Unknown';
 let apdu=null;
-if(techs.includes('android.nfc.tech.IsoDep')){tech='IsoDep';try{const r=await NfcManager.isoDepHandler.transceive(hBytes('00A404000E325041592E5359532E444446303100'));apdu=bHex(r);}catch(e){}}
-else if(techs.includes('android.nfc.tech.Ndef')){tech='NDEF';try{const m=await NfcManager.ndefHandler.getNdefMessage();if(m?.ndefMessage?.[0]?.payload)apdu=bHex(m.ndefMessage[0].payload);}catch(e){}}
+if(techs.includes('android.nfc.tech.IsoDep')){tech='IsoDep';try{const r=await NfcManager.isoDepHandler.transceive(hB('00A404000E325041592E5359532E444446303100'));apdu=bH(r);}catch(e){}}
+else if(techs.includes('android.nfc.tech.Ndef')){tech='NDEF';try{const m=await NfcManager.ndefHandler.getNdefMessage();if(m?.ndefMessage?.[0]?.payload)apdu=bH(m.ndefMessage[0].payload);}catch(e){}}
 else if(techs.includes('android.nfc.tech.MifareClassic'))tech='MIFARE Classic';
 else if(techs.includes('android.nfc.tech.MifareUltralight'))tech='MIFARE UL';
 else if(techs.includes('android.nfc.tech.NfcA'))tech='NFC-A';
 else if(techs.includes('android.nfc.tech.NfcB'))tech='NFC-B';
 const entry={id:tagId,tech,apdu,ts:Date.now()};
-setTags(p=>[entry,...p].slice(0,100));setTCnt(n=>n+1);
+setTags(p=>[entry,...p].slice(0,100));
+setTCnt(n=>n+1);
 addEv({type:'TAG',src:'LOCAL',data:`${tagId}|${tech}`});
 ws.current?.send(JSON.stringify({type:'NFC_TAG_READ',tagId,tech,apduResponse:apdu}));
-Alert.alert('Tag Citit!',`ID: ${tagId}\nTeh: ${tech}${apdu?'\nAPDU: '+apdu.slice(0,30):''}`)
-}catch(e){if(e.message!=='cancelled')Alert.alert('Eroare NFC',e.message);}
-finally{setScan(false);NfcManager.cancelTechnologyRequest().catch(()=>{});}
-},[nfcOk,nfcOn,addEv]);
-const cancelScan=useCallback(()=>{NfcManager.cancelTechnologyRequest().catch(()=>{});setScan(false);},[]);
+}catch(e){}
+finally{await NfcManager.cancelTechnologyRequest().catch(()=>{});}
+},[addEv]);
+useEffect(()=>{
+if(!autoScan){loopRef.current=false;NfcManager.cancelTechnologyRequest().catch(()=>{});setScanning(false);return;}
+if(!nfcOk||!nfcOn){Alert.alert('NFC','Activati NFC din Setari!');setAutoScan(false);return;}
+loopRef.current=true;
+setScanning(true);
+const run=async()=>{while(loopRef.current){await scanOnce();await new Promise(r=>setTimeout(r,500));}setScanning(false);};
+run();
+return()=>{loopRef.current=false;NfcManager.cancelTechnologyRequest().catch(()=>{});};
+},[autoScan,nfcOk,nfcOn,scanOnce]);
+const addEv2=addEv;
 const connect=useCallback(()=>{
 if(ws.current){ws.current.close();ws.current=null;return;}
 setSt('connecting');
@@ -98,13 +112,19 @@ return(<SafeAreaView style={s.root}><StatusBar barStyle="light-content" backgrou
 <View style={s.card}><Text style={s.lbl}>EVENIMENTE</Text><View style={s.lB}>{events.length===0?<Text style={s.emp}>Niciun eveniment</Text>:events.slice(0,40).map((e,i)=>(<Text key={i} style={[s.lR,e.type==='TAG'?{color:C.c2}:e.type==='APDU'?{color:C.c1}:e.type==='HCE'?{color:C.c5}:{color:C.t3}]}>{fT(e.ts)} [{e.type}] {e.data?.slice(0,50)}</Text>))}</View></View>
 </ScrollView>}
 {tab===1&&<ScrollView contentContainerStyle={s.pg}>
-<View style={[s.card,{alignItems:'center',paddingVertical:30}]}><Text style={{fontSize:72,color:scan?C.c2:C.c1}}>{scan?'◉':'◎'}</Text><Text style={{fontFamily:'monospace',fontSize:11,color:scan?C.c2:C.t3,marginTop:10,letterSpacing:1}}>{scan?'SCANARE ACTIVA - APROPIATI CARDUL':'APASATI BUTONUL PENTRU SCANARE'}</Text></View>
-<TouchableOpacity style={[s.btn,{marginBottom:12},scan&&{borderColor:C.c4}]} onPress={scan?cancelScan:startScan}><Text style={[s.bT,scan&&{color:C.c4}]}>{scan?'OPRESTE SCANAREA':'SCANEAZA TAG NFC'}</Text></TouchableOpacity>
-<View style={s.card}><View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:8}}><Text style={s.lbl}>TAGURI ({tags.length})</Text><TouchableOpacity onPress={()=>setTags([])}><Text style={{fontFamily:'monospace',fontSize:10,color:C.c4}}>CLEAR</Text></TouchableOpacity></View>
+<View style={[s.card,{alignItems:'center',paddingVertical:24}]}>
+<Text style={{fontSize:64,color:scanning?C.c3:autoScan?C.c2:C.c1}}>{scanning?'◉':autoScan?'◌':'◎'}</Text>
+<Text style={{fontFamily:'monospace',fontSize:11,marginTop:10,letterSpacing:1,textAlign:'center',color:scanning?C.c3:autoScan?C.c2:C.t3}}>{scanning?'SCANARE ACTIVA - APROPIATI CARDUL':autoScan?'PORNIRE SCANNER...':'SCANNER OPRIT'}</Text>
+<View style={{flexDirection:'row',alignItems:'center',gap:14,marginTop:16,backgroundColor:C.bg0,borderRadius:8,padding:12,borderWidth:1,borderColor:autoScan?C.c3:C.b2}}>
+<Text style={{fontFamily:'monospace',fontSize:12,color:autoScan?C.c3:C.t3,letterSpacing:1}}>SCANARE AUTO</Text>
+<Switch value={autoScan} onValueChange={setAutoScan} trackColor={{false:C.b2,true:'rgba(57,255,20,0.3)'}} thumbColor={autoScan?C.c3:C.t3}/>
+</View>
+</View>
+<View style={s.card}><View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:8}}><Text style={s.lbl}>TAGURI CITITE ({tags.length})</Text><TouchableOpacity onPress={()=>setTags([])}><Text style={{fontFamily:'monospace',fontSize:10,color:C.c4}}>CLEAR</Text></TouchableOpacity></View>
 {tags.length===0?<Text style={s.emp}>Niciun tag citit</Text>:tags.slice(0,30).map((t,i)=>(<View key={i} style={{borderWidth:1,borderColor:i===0?C.c2:C.b1,borderRadius:6,padding:10,marginBottom:8}}><Text style={{fontFamily:'monospace',fontSize:14,color:C.c2,fontWeight:'bold',marginBottom:6}}>◈ {t.id||'?'}</Text><View style={{flexDirection:'row',gap:8,marginBottom:4,flexWrap:'wrap'}}><View style={{borderWidth:1,borderColor:C.c1,borderRadius:10,paddingHorizontal:8,paddingVertical:2}}><Text style={{fontFamily:'monospace',fontSize:9,color:C.c1}}>{t.tech}</Text></View><Text style={{fontFamily:'monospace',fontSize:9,color:C.t3}}>{fT(t.ts)}</Text></View>{t.apdu&&<Text style={{fontFamily:'monospace',fontSize:9,color:C.t2,backgroundColor:C.bg0,padding:6,borderRadius:4}} numberOfLines={2}>{t.apdu}</Text>}</View>))}</View>
 </ScrollView>}
 {tab===2&&<ScrollView contentContainerStyle={s.pg}>
-<View style={s.card}><Text style={s.lbl}>TARGET</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom:10}}>{clients.length===0?<Text style={s.emp}>Conecteaza-te la server</Text>:clients.map(c=>(<TouchableOpacity key={c.id} style={[{borderWidth:1,borderColor:aTgt===c.id?C.c1:C.b2,borderRadius:6,padding:10,marginRight:8,minWidth:90,alignItems:'center',backgroundColor:C.bg0},aTgt===c.id&&{backgroundColor:'rgba(0,212,255,0.08)'}]} onPress={()=>setATgt(c.id)}><Text style={{fontFamily:'monospace',fontSize:9,color:aTgt===c.id?C.c1:C.t3,textAlign:'center',lineHeight:16}}>{c.id.slice(0,8)}{'\n'}{c.role}</Text></TouchableOpacity>))}</ScrollView>
+<View style={s.card}><Text style={s.lbl}>TARGET</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom:10}}>{clients.length===0?<Text style={s.emp}>Conecteaza-te la server</Text>:clients.map(c=>(<TouchableOpacity key={c.id} style={{borderWidth:1,borderColor:aTgt===c.id?C.c1:C.b2,borderRadius:6,padding:10,marginRight:8,minWidth:90,alignItems:'center',backgroundColor:aTgt===c.id?'rgba(0,212,255,0.08)':C.bg0}} onPress={()=>setATgt(c.id)}><Text style={{fontFamily:'monospace',fontSize:9,color:aTgt===c.id?C.c1:C.t3,textAlign:'center',lineHeight:16}}>{c.id.slice(0,8)}{'\n'}{c.role}</Text></TouchableOpacity>))}</ScrollView>
 <Text style={s.lbl}>COMANDA APDU</Text><TextInput style={[s.inp,{minHeight:70}]} value={aCmd} onChangeText={setACmd} placeholder="00 A4 04 00..." placeholderTextColor={C.t3} autoCapitalize="characters" multiline/>
 <TouchableOpacity style={[s.btn,(!aTgt||aLoad)&&{opacity:0.4}]} onPress={sendApdu} disabled={!aTgt||aLoad}><Text style={s.bT}>{aLoad?'ASTEPTARE...':'TRIMITE APDU'}</Text></TouchableOpacity></View>
 <View style={[s.card,{borderColor:aRsp.endsWith('9000')?C.c3:aRsp.startsWith('ERR')?C.c4:C.b1}]}><Text style={s.lbl}>RASPUNS</Text><Text style={{fontFamily:'monospace',fontSize:13,backgroundColor:C.bg0,padding:12,borderRadius:4,minHeight:50,lineHeight:22,color:aRsp.startsWith('ERR')?C.c4:C.c3}}>{aRsp}</Text>{!!aSt&&<Text style={{fontFamily:'monospace',fontSize:10,color:C.t3,marginTop:6}}>{aSt}</Text>}</View>
