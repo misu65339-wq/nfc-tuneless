@@ -14,7 +14,7 @@ const[tab,setTab]=useState(0);
 const ws=useRef(null);const pending=useRef({});
 const[nfcOk,setNfcOk]=useState(false);const[nfcOn,setNfcOn]=useState(false);
 const[autoScan,setAutoScan]=useState(false);const[scanning,setScanning]=useState(false);
-const loopRef=useRef(false);const lastTagRef=useRef('');
+const loopRef=useRef(false);const lastTagRef=useRef('');const cardConnected=useRef(false);
 const[url,setUrl]=useState('wss://nfctuneless.serveousercontent.com');
 const[st,setSt]=useState('disconnected');const[myId,setMyId]=useState(null);
 const[clients,setClients]=useState([]);const[events,setEvents]=useState([]);
@@ -88,16 +88,58 @@ case 'APDU_COMMAND':pHce(m);break;
 case 'APDU_RELAY_RESPONSE':{const p=pending.current[m.requestId];if(p){clearTimeout(p.timer);p.resolve(m.apdu);delete pending.current[m.requestId];}setACnt(n=>n+1);break;}
 case 'APDU_RELAY_ERROR':{const p=pending.current[m.requestId];if(p){clearTimeout(p.timer);p.reject(new Error(m.error));delete pending.current[m.requestId];}break;}
 }},[hOn,myId,addEv]);
-const pHce=useCallback((m)=>{
+const pHce=useCallback(async(m)=>{
 setHSt(p=>({t:p.t+1,s:p.s+(m.apdu?.startsWith('00A40400')?1:0),o:p.o+(m.apdu?.startsWith('00A40400')?0:1)}));
-let r='9000';
-if(hMode===2)r=hCust.replace(/\s/g,'').toUpperCase()||'9000';
-else if(m.apdu?.startsWith('00A40400'))r='6F0A84064E464354554C9000';
+const apduBytes=hB(m.apdu||'');
+let r='6F00';
+try{
+if(hMode===2){
+// Custom response
+r=hCust.replace(/\s/g,'').toUpperCase()||'9000';
+}else if(hMode===1){
+// Relay WS - trimite mai departe
+ws.current?.send(JSON.stringify({type:'APDU_RELAY_REQUEST',targetClientId:'card',apdu:m.apdu,requestId:m.requestId}));
+return;
+}else{
+// Auto - citeste card fizic real
+if(cardConnected.current){
+try{
+const resp=await NfcManager.isoDepHandler.transceive(apduBytes);
+r=bH(resp);
+}catch(e){
+r='6F00';
+}
+}else{
+// Fallback local
+if(m.apdu?.startsWith('00A40400'))r='6F0A84064E464354554C9000';
 else if(m.apdu?.startsWith('80A800'))r='771682021800009000';
+else r='9000';
+}
+}
+}catch(e){r='6F00';}
 ws.current?.send(JSON.stringify({type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:r}));
 setHLog(p=>[{cmd:m.apdu,rsp:r,ts:Date.now()},...p].slice(0,50));
-addEv({type:'HCE',src:'LOCAL',data:`${m.apdu?.slice(0,16)}->${r}`});
+addEv({type:'HCE',src:cardConnected.current?'CARD':'LOCAL',data:`${m.apdu?.slice(0,16)}->${r}`});
 },[hMode,hCust,addEv]);
+const startCardRelay=useCallback(async()=>{
+if(!nfcOk||!nfcOn){Alert.alert('NFC','Activati NFC!');return;}
+try{
+await NfcManager.requestTechnology([NfcTech.IsoDep]);
+cardConnected.current=true;
+addEv({type:'HCE',src:'CARD',data:'Card fizic conectat - relay activ'});
+setHLog(p=>[{cmd:'CARD CONECTAT',rsp:'RELAY ACTIV',ts:Date.now()},...p]);
+}catch(e){
+cardConnected.current=false;
+Alert.alert('Eroare','Nu s-a putut conecta la card: '+e.message);
+}
+},[nfcOk,nfcOn,addEv]);
+
+const stopCardRelay=useCallback(()=>{
+cardConnected.current=false;
+NfcManager.cancelTechnologyRequest().catch(()=>{});
+addEv({type:'HCE',src:'CARD',data:'Card deconectat'});
+},[addEv]);
+
 const sendApdu=useCallback(async()=>{
 if(!aTgt||!aCmd)return;
 const cmd=aCmd.replace(/\s/g,'').toUpperCase();
@@ -163,6 +205,9 @@ return(<SafeAreaView style={s.root}><StatusBar barStyle="light-content" backgrou
 
 {tab===3&&<ScrollView contentContainerStyle={s.pg}>
 <View style={s.card}><View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}><View><Text style={{fontFamily:'monospace',fontSize:14,color:C.c1,fontWeight:'bold'}}>HCE EMULATOR</Text><Text style={{fontFamily:'monospace',fontSize:10,marginTop:2,color:hOn?C.c3:C.t3}}>{hOn?'ACTIV':'INACTIV'}</Text></View><Switch value={hOn} onValueChange={setHOn} trackColor={{false:C.b2,true:'rgba(57,255,20,0.3)'}} thumbColor={hOn?C.c3:C.t3}/></View>
+<TouchableOpacity style={{borderWidth:1,borderColor:cardConnected.current?'#39FF14':'#FF6600',borderRadius:6,padding:12,alignItems:'center',marginBottom:10,backgroundColor:cardConnected.current?'rgba(57,255,20,0.08)':'rgba(255,102,0,0.08)'}} onPress={cardConnected.current?stopCardRelay:startCardRelay}>
+<Text style={{fontFamily:'monospace',fontSize:12,color:cardConnected.current?'#39FF14':'#FF6600',letterSpacing:2}}>{cardConnected.current?'⏹ OPRESTE CARD RELAY':'▶ PORNESTE CARD RELAY'}</Text>
+</TouchableOpacity>
 <Text style={[s.lbl,{marginTop:12}]}>MOD RASPUNS</Text><View style={{flexDirection:'row',gap:6}}>{['Auto','Relay WS','Custom'].map((m,i)=>(<TouchableOpacity key={m} style={{flex:1,borderWidth:1,borderColor:hMode===i?C.c1:C.b2,borderRadius:4,padding:8,alignItems:'center',backgroundColor:hMode===i?'rgba(0,212,255,0.08)':'transparent'}} onPress={()=>setHMode(i)}><Text style={{fontFamily:'monospace',fontSize:9,color:hMode===i?C.c1:C.t3,textAlign:'center'}}>{m}</Text></TouchableOpacity>))}</View>
 {hMode===2&&<TextInput style={[s.inp,{marginTop:10}]} value={hCust} onChangeText={setHCust} placeholder="9000" placeholderTextColor={C.t3} autoCapitalize="characters"/>}</View>
 <View style={{flexDirection:'row',gap:8,marginBottom:12}}>{[{l:'TOTAL',v:hSt.t,c:C.c3},{l:'SELECT',v:hSt.s,c:C.c1},{l:'ALTE',v:hSt.o,c:C.c5}].map(it=>(<View key={it.l} style={{flex:1,backgroundColor:C.bg2,borderWidth:1,borderColor:C.b1,borderRadius:8,padding:10,alignItems:'center'}}><Text style={{fontFamily:'monospace',fontSize:24,fontWeight:'bold',color:it.c}}>{it.v}</Text><Text style={{fontFamily:'monospace',fontSize:8,color:C.t3}}>{it.l}</Text></View>))}</View>
