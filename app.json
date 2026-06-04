@@ -2,7 +2,7 @@
   "expo": {
     "name": "NFC Tuneless",
     "slug": "nfc-tuneless",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "main": "index.js",
     "android": {
       "package": "com.nfctuneless.app",
@@ -12,6 +12,15 @@
         "android.permission.ACCESS_NETWORK_STATE"
       ]
     },
-    "plugins": []
+    "plugins": [
+      [
+        "react-native-nfc-manager",
+        {
+          "nfcPermission": "Necesită NFC pentru citire taguri",
+          "selectIdentifiers": ["F0010203040506"],
+          "systemCodes": []
+        }
+      ]
+    ]
   }
 }

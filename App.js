@@ -423,3 +423,5 @@ const s = StyleSheet.create({
   statBig:    {fontFamily:'monospace',fontSize:26,fontWeight:'bold'},
   hceEntry:   {paddingVertical:4,borderBottomWidth:1,borderBottomColor:C.b1},
 });
+
+// NFC hook integration - append to imports at top of file
