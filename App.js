@@ -84,7 +84,7 @@ if(m.pin)setServerPin(m.pin);
 break;
 case 'PIN_INFO':setServerPin(m.pin||'------');break;
 case 'NFC_TAG_READ':setTCnt(n=>n+1);setTags(p=>[{id:m.tagId,tech:m.tech,apdu:m.apduResponse,src:m.fromClient?.slice(0,8)||'?',ts:Date.now()},...p].slice(0,100));addEv({type:'TAG',src:m.fromClient?.slice(0,8)||'?',data:`${m.tagId}|${m.tech}`});break;
-case 'APDU_COMMAND':if(hOn)pHce(m);break;
+case 'APDU_COMMAND':pHce(m);break;
 case 'APDU_RELAY_RESPONSE':{const p=pending.current[m.requestId];if(p){clearTimeout(p.timer);p.resolve(m.apdu);delete pending.current[m.requestId];}setACnt(n=>n+1);break;}
 case 'APDU_RELAY_ERROR':{const p=pending.current[m.requestId];if(p){clearTimeout(p.timer);p.reject(new Error(m.error));delete pending.current[m.requestId];}break;}
 }},[hOn,myId,addEv]);
