@@ -129,3 +129,23 @@ wss.on('connection', (ws) => {
 });
 
 console.log(`NFC Tuneless Server pe port ${PORT}`);
+
+// HTTP endpoint pentru URL update
+const httpServer = require('http').createServer((req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (req.url.startsWith('/seturl')) {
+    const url = new URL('http://localhost' + req.url).searchParams.get('url');
+    if (url) {
+      currentUrl = url;
+      currentPin = genPin();
+      console.log(`\n🔗 URL: ${url}\n🔑 PIN: ${currentPin}\n`);
+      broadcastState();
+    }
+    res.end('OK');
+  } else if (req.url === '/pin') {
+    res.end(JSON.stringify({ pin: currentPin, url: currentUrl }));
+  } else {
+    res.end('NFC Tuneless Server');
+  }
+});
+httpServer.listen(8081, () => console.log('HTTP pe port 8081'));
