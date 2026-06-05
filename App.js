@@ -1,5 +1,5 @@
 import{useState,useRef,useEffect,useCallback}from'react';
-import{NativeModules,NativeEventEmitter,Platform}from'react-native';
+import{NativeModules,NativeEventEmitter,Platform,AppState}from'react-native';
 import{View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,Switch,StatusBar,Alert,Modal}from'react-native';
 import{SafeAreaView}from'react-native-safe-area-context';
 import NfcManager,{NfcTech}from'react-native-nfc-manager';
@@ -79,6 +79,24 @@ useEffect(()=>{
   HceModule.setActive(hOn);
 },[hOn]);
 
+
+// ── Auto-reconnect + AppState ─────────────────────────────────
+const urlRef=useRef(url);
+const roleRef=useRef(role);
+useEffect(()=>{urlRef.current=url;},[url]);
+useEffect(()=>{roleRef.current=role;},[role]);
+
+useEffect(()=>{
+  const sub=AppState.addEventListener('change',(state)=>{
+    if(state==='active'){
+      // Reconecteaza cand aplicatia revine in foreground
+        setTimeout(()=>connect(urlRef.current),1000);
+      }
+    }
+  });
+  return()=>sub.remove();
+},[]);
+
 const addEv=useCallback((ev)=>{setEvents(p=>[{...ev,ts:Date.now()},...p].slice(0,200));},[]);
 const scanOnce=useCallback(async()=>{
 try{
@@ -114,7 +132,7 @@ if(ws.current){ws.current.close();ws.current=null;return;}
 setSt('connecting');
 try{const s=new WebSocket(u);ws.current=s;
 s.onopen=()=>{setSt('connected');s.send(JSON.stringify({type:'REGISTER',role,info:{device:'NFC Tuneless'}}));s.send(JSON.stringify({type:'GET_CLIENTS'}));addEv({type:'SYS',src:'WS',data:'Conectat'});};
-s.onclose=()=>{setSt('disconnected');ws.current=null;addEv({type:'SYS',src:'WS',data:'Deconectat'});};
+s.onclose=()=>{setSt('disconnected');ws.current=null;addEv({type:'SYS',src:'WS',data:'Deconectat'});setTimeout(()=>{if(urlRef.current)connect(urlRef.current);},3000);};
 s.onerror=()=>{setSt('disconnected');ws.current=null;};
 s.onmessage=(e)=>{try{hMsg(JSON.parse(e.data));}catch{}};
 }catch{setSt('disconnected');}
