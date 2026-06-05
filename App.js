@@ -168,6 +168,18 @@ readerRelay.current=false;isoDepRef.current=null;
 NfcManager.cancelTechnologyRequest().catch(()=>{});
 addEv({type:'HCE',src:'CARD',data:'Card relay oprit'});
 },[addEv]);
+const readHceLog=useCallback(()=>{
+const{HceModule}=NativeModules;
+HceModule.readLog().then(log=>{
+Alert.alert('HCE Log',log||'Log gol');
+}).catch(e=>Alert.alert('Eroare',e.message));
+},[]);
+
+const clearHceLog=useCallback(()=>{
+const{HceModule}=NativeModules;
+if(HceModule)HceModule.clearLog();
+},[]);
+
 const sendApdu=useCallback(async()=>{
 if(!aTgt||!aCmd)return;
 const cmd=aCmd.replace(/\s/g,'').toUpperCase();
@@ -244,7 +256,20 @@ return(<SafeAreaView style={s.root}><StatusBar barStyle="light-content" backgrou
 {hMode===2&&<TextInput style={[s.inp,{marginTop:10}]} value={hCust} onChangeText={setHCust} placeholder="9000" placeholderTextColor={C.t3} autoCapitalize="characters"/>}
 </View>
 <View style={{flexDirection:'row',gap:8,marginBottom:12}}>{[{l:'TOTAL',v:hSt.t,c:C.c3},{l:'SELECT',v:hSt.s,c:C.c1},{l:'ALTE',v:hSt.o,c:C.c5}].map(it=>(<View key={it.l} style={{flex:1,backgroundColor:C.bg2,borderWidth:1,borderColor:C.b1,borderRadius:8,padding:10,alignItems:'center'}}><Text style={{fontFamily:'monospace',fontSize:24,fontWeight:'bold',color:it.c}}>{it.v}</Text><Text style={{fontFamily:'monospace',fontSize:8,color:C.t3}}>{it.l}</Text></View>))}</View>
-<View style={s.card}><View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:8}}><Text style={s.lbl}>APDU LOG</Text><TouchableOpacity onPress={()=>{setHLog([]);setHSt({t:0,s:0,o:0});}}><Text style={{fontFamily:'monospace',fontSize:10,color:C.c4}}>CLEAR</Text></TouchableOpacity></View>
+<View style={s.card}><View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:8}}><Text style={s.lbl}>APDU LOG</Text><TouchableOpacity onPress={()=>{
+const{NativeModules,Platform}=require('react-native');
+if(Platform.OS==='android'){
+const RNFS=require('react-native').NativeModules;
+try{
+const path='/sdcard/Android/data/com.nfctuneless.app/files/hce_log.txt';
+require('react-native').NativeModules.HceModule&&
+fetch('file://'+path).then(r=>r.text()).then(t=>alert(t||'Log gol')).catch(e=>alert('Nu exista log: '+e.message));
+}catch(e){alert('Eroare: '+e.message);}
+}
+}} style={{borderWidth:1,borderColor:'#00D4FF',borderRadius:4,padding:6,paddingHorizontal:10}}>
+<Text style={{fontFamily:'monospace',fontSize:10,color:'#00D4FF'}}>LOG</Text>
+</TouchableOpacity>
+<TouchableOpacity onPress={()=>{setHLog([]);setHSt({t:0,s:0,o:0});}}><Text style={{fontFamily:'monospace',fontSize:10,color:C.c4}}>CLEAR</Text></TouchableOpacity></View>
 <View style={s.lB}>{hLog.length===0?<Text style={s.emp}>Emulator inactiv</Text>:hLog.slice(0,20).map((e,i)=>(<View key={i} style={{paddingVertical:4,borderBottomWidth:1,borderBottomColor:C.b1}}><Text style={{fontFamily:'monospace',fontSize:9,color:C.t3}}>{fT(e.ts)}</Text><Text style={{fontFamily:'monospace',fontSize:9,color:C.c5}} numberOfLines={1}>{e.cmd?.slice(0,32)}</Text><Text style={{fontFamily:'monospace',fontSize:9,color:C.c3}} numberOfLines={1}>{e.rsp?.slice(0,32)}</Text></View>))}</View></View>
 </ScrollView>}
 <Modal visible={showConnectPin} transparent animationType="fade">
