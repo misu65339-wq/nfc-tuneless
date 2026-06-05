@@ -32,7 +32,7 @@ const[showConnectPin,setShowConnectPin]=useState(false);
 useEffect(()=>{urlRef.current=url;},[url]);
 useEffect(()=>{roleRef.current=role;},[role]);
 useEffect(()=>{
-(async()=>{try{const ok=await NfcManager.isSupported();setNfcOk(ok);if(ok){await NfcManager.start();setNfcOn(await NfcManager.isEnabled())}}catch(e){}})();
+(async()=>{try{let ok=false;try{ok=await NfcManager.isSupported();}catch(e){ok=true;}setNfcOk(ok);if(ok){try{await NfcManager.start();}catch(e){}try{setNfcOn(await NfcManager.isEnabled());}catch(e){setNfcOn(true);}}}catch(e){}})();
 return()=>{loopRef.current=false;NfcManager.cancelTechnologyRequest().catch(()=>{})};
 },[]);
 useEffect(()=>{
