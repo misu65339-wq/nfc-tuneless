@@ -105,7 +105,7 @@ const u=connectUrl||urlRef.current;
 if(ws.current){ws.current.close();ws.current=null;return;}
 setSt('connecting');
 try{const s=new WebSocket(u);ws.current=s;
-s.onopen=()=>{setSt('connected');s.send(JSON.stringify({type:'REGISTER',role:roleRef.current,info:{device:'NFC Tuneless'}}));s.send(JSON.stringify({type:'GET_CLIENTS'}));addEv({type:'SYS',src:'WS',data:'Conectat'});};
+s.onopen=()=>{setSt('connected');s.send(JSON.stringify({type:'REGISTER',role:roleRef.current,info:{device:'NFC Tuneless'}}));s.send(JSON.stringify({type:'GET_CLIENTS'}));addEv({type:'SYS',src:'WS',data:'Conectat'});if(Platform.OS==='android'){const{HceModule}=NativeModules;HceModule?.startForegroundService();}};
 s.onclose=()=>{setSt('disconnected');ws.current=null;addEv({type:'SYS',src:'WS',data:'Deconectat'});setTimeout(()=>{connect(urlRef.current);},3000);};
 s.onerror=()=>{setSt('disconnected');ws.current=null;};
 s.onmessage=(e)=>{try{hMsg(JSON.parse(e.data));}catch{}};
