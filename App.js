@@ -1,4 +1,5 @@
 import{useState,useRef,useEffect,useCallback}from'react';
+import{NativeModules,NativeEventEmitter,Platform}from'react-native';
 import{View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,Switch,StatusBar,Alert,Modal}from'react-native';
 import{SafeAreaView}from'react-native-safe-area-context';
 import NfcManager,{NfcTech}from'react-native-nfc-manager';
@@ -29,6 +30,55 @@ const[pinInput,setPinInput]=useState('');
 const[showPinModal,setShowPinModal]=useState(false);
 const[showConnectPin,setShowConnectPin]=useState(false);
 useEffect(()=>{(async()=>{try{const ok=await NfcManager.isSupported();setNfcOk(ok);if(ok){await NfcManager.start();setNfcOn(await NfcManager.isEnabled())}}catch(e){}})();return()=>{loopRef.current=false;NfcManager.cancelTechnologyRequest().catch(()=>{})};},[]);
+
+// ── HCE Native Listener ───────────────────────────────────────
+useEffect(()=>{
+  if(Platform.OS!=='android')return;
+  const{HceModule}=NativeModules;
+  const emitter=new NativeEventEmitter(HceModule);
+  const sub=emitter.addListener('onApduCommand',(event)=>{
+    const{requestId,apdu}=event;
+    addEv({type:'HCE',src:'POS',data:'POS CMD: '+apdu?.slice(0,16)});
+    // Relay APDU catre server -> Telefon B -> card
+    if(ws.current?.readyState===1){
+      // Gaseste primul client cu rol reader/both
+      const target=clients.find(c=>c.role==='reader'||c.role==='both');
+      if(target){
+        const reqId=requestId;
+        pending.current[reqId]={
+          resolve:(resp)=>{
+            HceModule.deliverResponse(reqId,resp);
+            addEv({type:'HCE',src:'CARD',data:'CARD RSP: '+resp?.slice(0,16)});
+          },
+          reject:()=>HceModule.deliverResponse(reqId,'6F00'),
+          timer:setTimeout(()=>{
+            HceModule.deliverResponse(reqId,'6F00');
+            delete pending.current[reqId];
+          },4500)
+        };
+        ws.current.send(JSON.stringify({
+          type:'APDU_RELAY_REQUEST',
+          targetClientId:target.id,
+          apdu:apdu,
+          requestId:reqId
+        }));
+      }else{
+        HceModule.deliverResponse(requestId,'6F00');
+      }
+    }else{
+      HceModule.deliverResponse(requestId,'6F00');
+    }
+  });
+  return()=>sub.remove();
+},[clients,addEv]);
+
+// Activeaza/dezactiveaza HCE nativ cand switch-ul se schimba
+useEffect(()=>{
+  if(Platform.OS!=='android')return;
+  const{HceModule}=NativeModules;
+  HceModule.setActive(hOn);
+},[hOn]);
+
 const addEv=useCallback((ev)=>{setEvents(p=>[{...ev,ts:Date.now()},...p].slice(0,200));},[]);
 const scanOnce=useCallback(async()=>{
 try{
