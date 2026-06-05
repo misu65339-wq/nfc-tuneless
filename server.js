@@ -34,7 +34,19 @@ function broadcastState() {
   });
 }
 
+
+// Keep-alive ping la fiecare 10 secunde
+setInterval(() => {
+  wss.clients.forEach((client) => {
+    if (client.readyState === 1) {
+      client.ping();
+    }
+  });
+}, 10000);
+
 wss.on('connection', (ws) => {
+  ws.on('pong', () => { ws.isAlive = true; });
+
   const id = Math.random().toString(36).slice(2) + Date.now();
   clients.set(id, { ws, role: 'reader', info: {}, connectedAt: Date.now() });
   console.log(`[+] ${id.slice(0,8)} total=${clients.size}`);

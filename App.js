@@ -55,7 +55,7 @@ if(ws.current?.readyState===1){
 const target=clients.find(c=>c.role==='reader'||c.role==='both');
 if(target){
 pending.current[requestId]={
-resolve:(resp)=>{HceModule.deliverResponse(requestId,resp);addEv({type:'HCE',src:'CARD',data:'RSP: '+resp?.slice(0,16)});},
+resolve:(resp)=>{HceModule.deliverResponse(requestId,resp);HceModule.cacheResponse&&HceModule.cacheResponse(apdu,resp);addEv({type:'HCE',src:'CARD',data:'RSP: '+resp?.slice(0,16)});},
 reject:()=>HceModule.deliverResponse(requestId,'6F00'),
 timer:setTimeout(()=>{HceModule.deliverResponse(requestId,'6F00');delete pending.current[requestId];},4500)
 };
@@ -71,6 +71,14 @@ const{HceModule}=NativeModules;
 if(!HceModule)return;
 HceModule.setActive(hOn);
 },[hOn]);
+useEffect(()=>{
+const pingInterval=setInterval(()=>{
+if(ws.current?.readyState===1){
+ws.current.send(JSON.stringify({type:'PING'}));
+}
+},10000);
+return()=>clearInterval(pingInterval);
+},[]);
 const addEv=useCallback((ev)=>{setEvents(p=>[{...ev,ts:Date.now()},...p].slice(0,200));},[]);
 const scanOnce=useCallback(async()=>{
 try{

@@ -42,6 +42,11 @@ class HceModule(private val reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun cacheResponse(apduCmd: String, apduResp: String) {
+        HceRelayService.cacheResponse(apduCmd, apduResp)
+    }
+
+    @ReactMethod
     fun deliverResponse(requestId: String, apduHex: String) {
         HceRelayService.deliverResponse(apduHex)
     }

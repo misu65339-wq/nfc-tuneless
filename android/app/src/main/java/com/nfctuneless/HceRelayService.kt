@@ -24,6 +24,9 @@ class HceRelayService : HostApduService() {
         var transactionCount = 0
         var successCount = 0
 
+        // Cache pentru raspunsuri frecvente
+        val responseCache = mutableMapOf<String, ByteArray>()
+
         fun deliverResponse(apduHex: String) {
             try {
                 if (apduHex.isEmpty()) { responseQueue.offer(SW_ERR); return }
@@ -33,11 +36,24 @@ class HceRelayService : HostApduService() {
                 for (i in bytes.indices) {
                     bytes[i] = clean.substring(i * 2, i * 2 + 2).toInt(16).toByte()
                 }
+                // Salveaza in cache
                 responseQueue.offer(bytes)
             } catch (e: Exception) {
                 Log.e(TAG, "deliverResponse error: ${e.message}")
                 responseQueue.offer(SW_ERR)
             }
+        }
+
+        fun cacheResponse(apduCmd: String, apduResp: String) {
+            try {
+                val clean = apduResp.trim().replace(" ", "")
+                val bytes = ByteArray(clean.length / 2)
+                for (i in bytes.indices) {
+                    bytes[i] = clean.substring(i * 2, i * 2 + 2).toInt(16).toByte()
+                }
+                responseCache[apduCmd] = bytes
+                saveLog("Cache salvat pentru: ${apduCmd.take(16)}")
+            } catch (e: Exception) {}
         }
 
         fun saveLog(msg: String) {
@@ -57,85 +73,68 @@ class HceRelayService : HostApduService() {
     }
 
     override fun processCommandApdu(apdu: ByteArray?, extras: Bundle?): ByteArray {
-        if (apdu == null || apdu.isEmpty()) {
-            saveLog("APDU null")
-            return SW_ERR
-        }
+        if (apdu == null || apdu.isEmpty()) return SW_ERR
         return try {
             val apduHex = apdu.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
             transactionCount++
-            saveLog("[$transactionCount] CMD: $apduHex active=$isActive")
+            saveLog("[$transactionCount] CMD: $apduHex")
 
-            if (!isActive) {
-                saveLog("[$transactionCount] Inactiv - local")
-                return processLocally(apduHex)
+            // Verifica cache primul - raspuns instant
+            val cached = responseCache[apduHex]
+            if (cached != null && !apduHex.startsWith("80AE")) {
+                saveLog("[$transactionCount] CACHE HIT: ${apduHex.take(16)}")
+                return cached
             }
 
-            val cb = onApduReceived
-            if (cb == null) {
-                saveLog("[$transactionCount] Callback null - local")
-                return processLocally(apduHex)
-            }
+            if (!isActive) return processLocally(apduHex)
+
+            val cb = onApduReceived ?: return processLocally(apduHex)
 
             responseQueue.clear()
 
-            // Thread separat - fix Android 16
             Thread {
                 try {
                     cb.invoke(System.currentTimeMillis().toString(), apduHex)
                 } catch (e: Exception) {
-                    saveLog("[$transactionCount] CB ERROR: ${e.message}")
+                    saveLog("CB ERROR: ${e.message}")
                     responseQueue.offer(SW_ERR)
                 }
             }.start()
 
-            // Timeout 2 secunde pentru POS
+            // Timeout 2 secunde
             val resp = responseQueue.poll(2000, TimeUnit.MILLISECONDS)
 
             if (resp == null) {
-                saveLog("[$transactionCount] TIMEOUT 2s - local fallback")
+                saveLog("[$transactionCount] TIMEOUT - local")
                 processLocally(apduHex)
             } else {
                 successCount++
                 val respHex = resp.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
-                saveLog("[$transactionCount] RSP OK: $respHex ($successCount/$transactionCount)")
+                saveLog("[$transactionCount] RSP: $respHex")
                 resp
             }
 
         } catch (e: Exception) {
-            saveLog("[$transactionCount] CRASH: ${e.message}")
+            saveLog("CRASH: ${e.message}")
             SW_ERR
         }
     }
 
     private fun processLocally(apduHex: String): ByteArray {
-        saveLog("Local processing: $apduHex")
         return when {
-            apduHex.startsWith("00A40400") -> {
-                saveLog("SELECT AID - raspuns local")
-                byteArrayOf(
-                    0x6F, 0x0A, 0x84.toByte(), 0x06,
-                    0x4E, 0x46, 0x43, 0x54, 0x55, 0x4C,
-                    0x90.toByte(), 0x00
-                )
-            }
-            apduHex.startsWith("80A800") -> {
-                saveLog("GPO - raspuns local")
-                byteArrayOf(0x77, 0x00, 0x90.toByte(), 0x00)
-            }
-            apduHex.startsWith("00B2") -> {
-                saveLog("READ RECORD - raspuns local")
-                SW_OK
-            }
-            else -> {
-                saveLog("APDU necunoscut - 9000")
-                SW_OK
-            }
+            apduHex.startsWith("00A40400") -> byteArrayOf(
+                0x6F, 0x0A, 0x84.toByte(), 0x06,
+                0x4E, 0x46, 0x43, 0x54, 0x55, 0x4C,
+                0x90.toByte(), 0x00
+            )
+            apduHex.startsWith("80A800") -> byteArrayOf(0x77, 0x00, 0x90.toByte(), 0x00)
+            apduHex.startsWith("00B2") -> SW_OK
+            else -> SW_OK
         }
     }
 
     override fun onDeactivated(reason: Int) {
-        saveLog("Dezactivat reason=$reason total=$transactionCount success=$successCount")
+        saveLog("Dezactivat total=$transactionCount success=$successCount")
         try { responseQueue.clear() } catch (e: Exception) {}
     }
 }
