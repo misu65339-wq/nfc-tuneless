@@ -3,7 +3,9 @@
   "version": "2.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "expo start"
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "expo": "~50.0.0",
