@@ -52,6 +52,22 @@ class HceRelayService : HostApduService() {
             } catch (e: Exception) {}
         }
 
+        
+        fun sendCrashReport(msg: String) {
+            try {
+                val topic = "nfctuneless_rxof2d45"
+                val url = java.net.URL("https://ntfy.sh/$topic")
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.doOutput = true
+                conn.setRequestProperty("Title", "NFC Tuneless Crash")
+                conn.setRequestProperty("Priority", "urgent")
+                conn.outputStream.write(msg.toByteArray())
+                conn.responseCode
+                conn.disconnect()
+            } catch (e: Exception) {}
+        }
+
         fun saveLog(msg: String) {
             try {
                 val ctx = appContext ?: return
@@ -126,7 +142,7 @@ class HceRelayService : HostApduService() {
                 try {
                     cb.invoke(System.currentTimeMillis().toString(), apduHex)
                 } catch (e: Exception) {
-                    saveLog("CB ERR: ${e.message}")
+                    saveLog("CB ERR: ${e.message}");Thread{sendCrashReport("CB ERR: ${e.message}")}.start()
                     responseQueue.offer(SW_ERR)
                 }
             }.start()
@@ -156,7 +172,7 @@ class HceRelayService : HostApduService() {
             }
 
         } catch (e: Exception) {
-            saveLog("CRASH: ${e.message}\n${e.stackTraceToString().take(200)}")
+            saveLog("CRASH: ${e.message}\n${e.stackTraceToString().take(200)}");Thread{sendCrashReport("CRASH: ${e.message} APDU#$transactionCount")}.start()
             Log.e(TAG, "CRASH: ${e.message}", e)
             SW_ERR
         }
