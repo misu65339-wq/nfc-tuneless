@@ -11,7 +11,6 @@ import android.os.PowerManager
 import android.util.Log
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
-import java.io.File
 
 class HceModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -27,7 +26,7 @@ class HceModule(private val reactContext: ReactApplicationContext) :
         HceRelayService.isActive = active
         if (active) {
             acquireWakeLock()
-            showNotification("NFC Relay Activ", "Telefonul emulează un card NFC")
+            showNotification("NFC Relay Activ", "Emulator card activ")
         } else {
             releaseWakeLock()
             hideNotification()
@@ -38,12 +37,7 @@ class HceModule(private val reactContext: ReactApplicationContext) :
                 putString("apdu", apduHex)
             })
         } else null
-        HceRelayService.saveLog("setActive: $active")
-    }
-
-    @ReactMethod
-    fun cacheResponse(apduCmd: String, apduResp: String) {
-        HceRelayService.cacheResponse(apduCmd, apduResp)
+        Log.d("HceModule", "setActive: $active")
     }
 
     @ReactMethod
@@ -52,70 +46,60 @@ class HceModule(private val reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun startForegroundService() {
+        try { NfcForegroundService.start(reactContext) }
+        catch (e: Exception) { Log.e("HceModule", "FG: ${e.message}") }
+    }
+
+    @ReactMethod
+    fun stopForegroundService() {
+        try { NfcForegroundService.stop(reactContext) }
+        catch (e: Exception) {}
+    }
+
+    @ReactMethod
     fun readLog(promise: Promise) {
         try {
-            val file = File(reactContext.getExternalFilesDir(null), "hce_log.txt")
-            if (!file.exists()) { promise.resolve("Log gol - niciun eveniment"); return }
-            val lines = file.readLines().takeLast(50).joinToString("\n")
-            promise.resolve(if (lines.isEmpty()) "Log gol" else lines)
-        } catch (e: Exception) {
-            promise.resolve("Eroare: ${e.message}")
-        }
+            val file = java.io.File(reactContext.getExternalFilesDir(null), "hce_log.txt")
+            if (!file.exists()) { promise.resolve("Log gol"); return }
+            promise.resolve(file.readLines().takeLast(50).joinToString("\n"))
+        } catch (e: Exception) { promise.resolve("Eroare: ${e.message}") }
     }
 
     @ReactMethod
     fun clearLog() {
-        try {
-            File(reactContext.getExternalFilesDir(null), "hce_log.txt").delete()
-        } catch (e: Exception) {}
-    }
-
-    @ReactMethod
-    fun getStats(promise: Promise) {
-        val map = Arguments.createMap()
-        map.putInt("total", HceRelayService.transactionCount)
-        map.putInt("success", HceRelayService.successCount)
-        promise.resolve(map)
+        try { java.io.File(reactContext.getExternalFilesDir(null), "hce_log.txt").delete() }
+        catch (e: Exception) {}
     }
 
     private fun showNotification(title: String, text: String) {
         try {
             val nm = reactContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val ch = NotificationChannel(CHANNEL_ID, "NFC Tuneless", NotificationManager.IMPORTANCE_LOW)
-                ch.description = "Status relay NFC"
-                nm.createNotificationChannel(ch)
+                nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "NFC Tuneless", NotificationManager.IMPORTANCE_LOW))
             }
-            val intent = reactContext.packageManager.getLaunchIntentForPackage(reactContext.packageName)
-            val pi = PendingIntent.getActivity(reactContext, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+            val pi = PendingIntent.getActivity(reactContext, 0,
+                reactContext.packageManager.getLaunchIntentForPackage(reactContext.packageName),
+                PendingIntent.FLAG_IMMUTABLE)
             val notif = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 Notification.Builder(reactContext, CHANNEL_ID)
-                    .setContentTitle(title)
-                    .setContentText(text)
+                    .setContentTitle(title).setContentText(text)
                     .setSmallIcon(android.R.drawable.ic_dialog_info)
-                    .setContentIntent(pi)
-                    .setOngoing(true)
-                    .build()
+                    .setContentIntent(pi).setOngoing(true).build()
             } else {
                 @Suppress("DEPRECATION")
                 Notification.Builder(reactContext)
-                    .setContentTitle(title)
-                    .setContentText(text)
+                    .setContentTitle(title).setContentText(text)
                     .setSmallIcon(android.R.drawable.ic_dialog_info)
-                    .setContentIntent(pi)
-                    .setOngoing(true)
-                    .build()
+                    .setContentIntent(pi).setOngoing(true).build()
             }
             nm.notify(NOTIF_ID, notif)
-        } catch (e: Exception) {
-            Log.e("HceModule", "Notification error: ${e.message}")
-        }
+        } catch (e: Exception) {}
     }
 
     private fun hideNotification() {
         try {
-            val nm = reactContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            nm.cancel(NOTIF_ID)
+            (reactContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIF_ID)
         } catch (e: Exception) {}
     }
 
@@ -127,22 +111,16 @@ class HceModule(private val reactContext: ReactApplicationContext) :
                 "NfcTuneless::HceWakeLock"
             )
             wakeLock?.acquire(10 * 60 * 1000L)
-        } catch (e: Exception) {
-            Log.e("HceModule", "WakeLock error: ${e.message}")
-        }
-    }
-
-    private fun releaseWakeLock() {
-        try {
-            wakeLock?.let { if (it.isHeld) it.release() }
-            wakeLock = null
         } catch (e: Exception) {}
     }
 
+    private fun releaseWakeLock() {
+        try { wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null }
+        catch (e: Exception) {}
+    }
+
     private fun sendEvent(name: String, params: WritableMap) {
-        reactContext
-            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-            .emit(name, params)
+        reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit(name, params)
     }
 
     @ReactMethod fun addListener(eventName: String) {}
