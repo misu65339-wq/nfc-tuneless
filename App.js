@@ -72,7 +72,8 @@ return;
 try{
 try{await NfcManager.cancelTechnologyRequest();}catch(e){}
 try{await NfcManager.unregisterTagEvent();}catch(e){}
-await new Promise(r=>setTimeout(r,500));
+try{NfcManager.setEventListener(null);}catch(e){}
+await new Promise(r=>setTimeout(r,800));
 addLog('Așteaptă card...',C.t2);
 await NfcManager.requestTechnology([NfcTech.IsoDep]);
 const tag=await NfcManager.getTag();
@@ -225,7 +226,14 @@ if(keepAliveRef.current){clearInterval(keepAliveRef.current);keepAliveRef.curren
 setCardOk(false);
 try{await NfcManager.cancelTechnologyRequest();}catch(e2){}
 addLog('Card deconectat! Reconectare...',C.c4);
+// Reset complet NFC
+(async()=>{
+try{await NfcManager.cancelTechnologyRequest();}catch(e){}
+try{await NfcManager.stop();}catch(e){}
+await new Promise(r=>setTimeout(r,500));
+try{await NfcManager.start();}catch(e){}
 if(autoRestartRef.current)setTimeout(()=>connectCard(),1000);
+})();
 }
 })();
 }
