@@ -1,6 +1,7 @@
 package com.nfctuneless.app
 
 import android.os.Build
+import android.view.WindowManager
 import android.os.Bundle
 
 import com.facebook.react.ReactActivity
@@ -12,6 +13,9 @@ import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
+    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    window.addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+    window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.

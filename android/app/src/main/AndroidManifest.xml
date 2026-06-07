@@ -50,6 +50,12 @@
         <meta-data
             android:name="android.nfc.cardemulation.host_apdu_service"
             android:resource="@xml/apdu_service"/>
+        <meta-data
+            android:name="android.nfc.cardemulation.apdu_service.foreground"
+            android:value="true"/>
+        <meta-data
+            android:name="android.nfc.cardemulation.apdu_service.foreground"
+            android:value="true"/>
     </service>
     <activity android:name="com.facebook.react.devsupport.DevSettingsActivity" android:exported="false"/>
   </application>
