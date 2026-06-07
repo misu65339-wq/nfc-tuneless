@@ -193,6 +193,20 @@ const tag=await NfcManager.getTag();
 isoDepRef.current=tag;
 readerRelay.current=true;
 setCardOk(true);
+
+// Keepalive card - trimite GET_CHALLENGE la fiecare 2 secunde
+const keepAlive = setInterval(async()=>{
+  try{
+    await NfcManager.isoDepHandler.transceive(hB('0084000004'));
+  }catch(e){
+    clearInterval(keepAlive);
+    readerRelay.current=false;
+    isoDepRef.current=null;
+    setCardOk(false);
+    addLog('Card deconectat!',C.c4);
+  }
+},2000);
+
 addLog('Card conectat! Relay activ.',C.c3);
 }catch(e){
 readerRelay.current=false;
