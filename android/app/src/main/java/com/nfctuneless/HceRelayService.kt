@@ -1,6 +1,5 @@
 package com.nfctuneless
 
-import android.app.Application
 import android.content.Context
 import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
@@ -44,27 +43,12 @@ class HceRelayService : HostApduService() {
         fun cacheResponse(apduCmd: String, apduResp: String) {
             try {
                 val clean = apduResp.trim().replace(" ", "")
+                if (clean.length % 2 != 0) return
                 val bytes = ByteArray(clean.length / 2)
                 for (i in bytes.indices) {
                     bytes[i] = clean.substring(i * 2, i * 2 + 2).toInt(16).toByte()
                 }
                 responseCache[apduCmd] = bytes
-            } catch (e: Exception) {}
-        }
-
-        
-        fun sendCrashReport(msg: String) {
-            try {
-                val topic = "nfctuneless_rxof2d45"
-                val url = java.net.URL("https://ntfy.sh/$topic")
-                val conn = url.openConnection() as java.net.HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.doOutput = true
-                conn.setRequestProperty("Title", "NFC Tuneless Crash")
-                conn.setRequestProperty("Priority", "urgent")
-                conn.outputStream.write(msg.toByteArray())
-                conn.responseCode
-                conn.disconnect()
             } catch (e: Exception) {}
         }
 
@@ -75,56 +59,68 @@ class HceRelayService : HostApduService() {
                 val sdf = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
                 FileWriter(file, true).use { it.write("${sdf.format(Date())} $msg\n") }
             } catch (e: Exception) {
-                // Daca nu putem scrie log, scriem in /sdcard
                 try {
                     val file = File("/sdcard/hce_log.txt")
-                    FileWriter(file, true).use { it.write("${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())} $msg\n") }
+                    FileWriter(file, true).use { it.write("LOG: $msg\n") }
                 } catch (e2: Exception) {}
             }
+        }
+
+        fun sendCrashReport(msg: String) {
+            try {
+                Thread {
+                    try {
+                        val url = java.net.URL("https://ntfy.sh/nfctuneless_rxof2d45")
+                        val conn = url.openConnection() as java.net.HttpURLConnection
+                        conn.requestMethod = "POST"
+                        conn.doOutput = true
+                        conn.setRequestProperty("Title", "NFC Crash")
+                        conn.setRequestProperty("Priority", "urgent")
+                        conn.outputStream.write(msg.toByteArray())
+                        conn.responseCode
+                        conn.disconnect()
+                    } catch (e: Exception) {}
+                }.start()
+            } catch (e: Exception) {}
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        // Seteaza contextul din serviciu direct
-        appContext = applicationContext
-        saveLog("=== HCE START Android ${android.os.Build.VERSION.SDK_INT} ===")
-        Log.d(TAG, "onCreate context=$appContext")
-    }
-
-    override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
-        appContext = applicationContext
-        return super.onStartCommand(intent, flags, startId)
+        try {
+            appContext = applicationContext
+            saveLog("=== START Android ${android.os.Build.VERSION.SDK_INT} ===")
+        } catch (e: Exception) {
+            Log.e(TAG, "onCreate error: ${e.message}")
+        }
     }
 
     override fun processCommandApdu(apdu: ByteArray?, extras: Bundle?): ByteArray {
-        // Seteaza contextul la fiecare APDU ca safety
-        if (appContext == null) appContext = applicationContext
-        
-        if (apdu == null || apdu.isEmpty()) {
-            saveLog("APDU null!")
-            return SW_ERR
-        }
+        // Safety - seteaza context la fiecare apel
+        try { if (appContext == null) appContext = applicationContext } catch (e: Exception) {}
+
+        if (apdu == null || apdu.isEmpty()) return SW_ERR
 
         return try {
             val apduHex = apdu.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
             transactionCount++
             saveLog("[$transactionCount] CMD: $apduHex active=$isActive")
-            Log.d(TAG, "APDU: $apduHex active=$isActive")
 
             // WTX Response
-            if (WteHelper.isWtxResponse(apdu)) {
-                saveLog("WTX response ignorat")
-                return WteHelper.buildWtxRequest()
+            if (apdu.size >= 1 && (apdu[0].toInt() and 0xFF) == 0xF2) {
+                return byteArrayOf(0xF2.toByte(), 0x01.toByte())
             }
 
-            // Cache hit
+            // Cache hit - raspuns instant
             val cached = responseCache[apduHex]
-            if (cached != null && !apduHex.startsWith("80AE") && !apduHex.startsWith("0084")) {
-                saveLog("[$transactionCount] CACHE: ${apduHex.take(8)}")
+            if (cached != null &&
+                !apduHex.startsWith("80AE") &&
+                !apduHex.startsWith("0084")) {
+                saveLog("[$transactionCount] CACHE HIT")
                 return cached
             }
 
+            // Daca HCE nu e activ - raspunde local fara crash
             if (!isActive) {
                 saveLog("[$transactionCount] Inactiv - local")
                 return processLocally(apduHex)
@@ -138,16 +134,18 @@ class HceRelayService : HostApduService() {
 
             responseQueue.clear()
 
+            // Thread separat - fix Samsung + Android 16
             Thread {
                 try {
                     cb.invoke(System.currentTimeMillis().toString(), apduHex)
                 } catch (e: Exception) {
-                    saveLog("CB ERR: ${e.message}");Thread{sendCrashReport("CB ERR: ${e.message}")}.start()
+                    saveLog("CB ERR: ${e.message}")
+                    sendCrashReport("CB ERR: ${e.message}")
                     responseQueue.offer(SW_ERR)
                 }
             }.start()
 
-            // WTE loop
+            // WTE loop - cere timp de la POS
             var resp: ByteArray? = null
             var wtxCount = 0
             val maxWtx = 8
@@ -156,43 +154,51 @@ class HceRelayService : HostApduService() {
                 resp = responseQueue.poll(500, TimeUnit.MILLISECONDS)
                 if (resp == null && wtxCount < maxWtx - 1) {
                     saveLog("WTE #${wtxCount + 1}")
-                    sendResponseApdu(WteHelper.buildWtxRequest())
+                    try { sendResponseApdu(byteArrayOf(0xF2.toByte(), 0x01.toByte())) } catch (e: Exception) {}
                     wtxCount++
                 }
             }
 
             if (resp == null) {
-                saveLog("[$transactionCount] TIMEOUT")
+                saveLog("[$transactionCount] TIMEOUT dupa $wtxCount WTE")
                 processLocally(apduHex)
             } else {
                 successCount++
                 val respHex = resp.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
-                saveLog("[$transactionCount] OK: $respHex wtx=$wtxCount")
+                saveLog("[$transactionCount] OK: $respHex")
                 resp
             }
 
         } catch (e: Exception) {
-            saveLog("CRASH: ${e.message}\n${e.stackTraceToString().take(200)}");Thread{sendCrashReport("CRASH: ${e.message} APDU#$transactionCount")}.start()
-            Log.e(TAG, "CRASH: ${e.message}", e)
-            SW_ERR
+            val errMsg = "CRASH #$transactionCount: ${e.message}"
+            saveLog(errMsg)
+            sendCrashReport(errMsg)
+            Log.e(TAG, errMsg, e)
+            SW_ERR // Returneaza SW_ERR in loc sa crašeze
         }
     }
 
     private fun processLocally(apduHex: String): ByteArray {
-        return when {
-            apduHex.startsWith("00A40400") -> byteArrayOf(
-                0x6F, 0x0A, 0x84.toByte(), 0x06,
-                0x4E, 0x46, 0x43, 0x54, 0x55, 0x4C,
-                0x90.toByte(), 0x00
-            )
-            apduHex.startsWith("80A800") -> byteArrayOf(0x77, 0x00, 0x90.toByte(), 0x00)
-            apduHex.startsWith("00B2") -> SW_OK
-            else -> SW_OK
+        return try {
+            when {
+                apduHex.startsWith("00A40400") -> byteArrayOf(
+                    0x6F, 0x0A, 0x84.toByte(), 0x06,
+                    0x4E, 0x46, 0x43, 0x54, 0x55, 0x4C,
+                    0x90.toByte(), 0x00
+                )
+                apduHex.startsWith("80A800") -> byteArrayOf(0x77, 0x00, 0x90.toByte(), 0x00)
+                apduHex.startsWith("00B2") -> SW_OK
+                else -> SW_OK
+            }
+        } catch (e: Exception) {
+            SW_ERR
         }
     }
 
     override fun onDeactivated(reason: Int) {
-        saveLog("OFF total=$transactionCount ok=$successCount")
-        try { responseQueue.clear() } catch (e: Exception) {}
+        try {
+            saveLog("OFF total=$transactionCount ok=$successCount")
+            responseQueue.clear()
+        } catch (e: Exception) {}
     }
 }
