@@ -1,9 +1,10 @@
 package com.nfctuneless.app
 
 import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Intent
-import android.content.IntentFilter
 import android.nfc.NfcAdapter
+import android.nfc.cardemulation.CardEmulation
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -16,10 +17,11 @@ import expo.modules.ReactActivityDelegateWrapper
 class MainActivity : ReactActivity() {
 
     private var nfcAdapter: NfcAdapter? = null
+    private var cardEmulation: CardEmulation? = null
     private var pendingIntent: PendingIntent? = null
+    private val hceComponent = ComponentName("com.nfctuneless.app", "com.nfctuneless.HceRelayService")
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Keep screen on + show when locked
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
         window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
@@ -28,8 +30,9 @@ class MainActivity : ReactActivity() {
         setTheme(R.style.AppTheme)
         super.onCreate(null)
 
-        // NFC Foreground Dispatch - preia NFC fara dialog
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
+        cardEmulation = CardEmulation.getInstance(nfcAdapter ?: return)
+
         val intent = Intent(this, javaClass).apply {
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
@@ -41,21 +44,21 @@ class MainActivity : ReactActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Activeaza foreground dispatch - NFC merge direct la aplicatie
         try {
+            // setPreferredService - ELIMINA conflictul NFC fara dialog
+            cardEmulation?.setPreferredService(this, hceComponent)
+
+            // ForegroundDispatch - preia toate evenimentele NFC
             nfcAdapter?.enableForegroundDispatch(
-                this,
-                pendingIntent,
-                null, // accepta toate tipurile NFC
-                null
+                this, pendingIntent, null, null
             )
         } catch (e: Exception) {}
     }
 
     override fun onPause() {
         super.onPause()
-        // Dezactiveaza foreground dispatch
         try {
+            cardEmulation?.unsetPreferredService(this)
             nfcAdapter?.disableForegroundDispatch(this)
         } catch (e: Exception) {}
     }
