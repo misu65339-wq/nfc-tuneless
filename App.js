@@ -182,12 +182,16 @@ const connectCard=useCallback(async()=>{
 if(cardOk){
 readerRelay.current=false;
 isoDepRef.current=null;
-NfcManager.cancelTechnologyRequest().catch(()=>{});
+try{await NfcManager.cancelTechnologyRequest();}catch(e){}
+try{await NfcManager.unregisterTagEvent();}catch(e){}
 setCardOk(false);
 addLog('Card deconectat',C.c2);
 return;
 }
 try{
+// Reset complet NFC
+try{await NfcManager.cancelTechnologyRequest();}catch(e){}
+await new Promise(r=>setTimeout(r,500));
 await NfcManager.requestTechnology([NfcTech.IsoDep]);
 const tag=await NfcManager.getTag();
 isoDepRef.current=tag;
