@@ -1,4 +1,5 @@
 import{useState,useRef,useEffect,useCallback}from'react';
+import{AsyncStorage}from'react-native';
 import{View,Text,TouchableOpacity,ScrollView,StyleSheet,StatusBar,NativeModules,NativeEventEmitter,Platform,AppState}from'react-native';
 import{SafeAreaView}from'react-native-safe-area-context';
 import NfcManager,{NfcTech}from'react-native-nfc-manager';
@@ -22,6 +23,7 @@ await new Promise(r=>setTimeout(r,200));
 
 export default function App(){
 const[mode,setMode]=useState(null);
+const[loading,setLoading]=useState(true);
 const ws=useRef(null);
 const pending=useRef({});
 const isoDepRef=useRef(null);
@@ -51,6 +53,17 @@ setLogs(p=>[{msg,color:color||C.t2,ts:Date.now()},...p].slice(0,50));
 useEffect(()=>{modeRef.current=mode;},[mode]);
 useEffect(()=>{clientsRef.current=clients;},[clients]);
 useEffect(()=>{myIdRef.current=myId;},[myId]);
+
+// Restaurare rol salvat
+useEffect(()=>{
+(async()=>{
+try{
+const saved=await AsyncStorage.getItem('role');
+if(saved==='A'||saved==='B'){setMode(saved);}
+}catch(e){}
+setLoading(false);
+})();
+},[]);
 
 // NFC Init
 useEffect(()=>{
@@ -332,13 +345,13 @@ return(
 <View style={s.center}>
 <Text style={s.title}>NFC TUNELESS</Text>
 <Text style={s.subtitle}>Selectează rolul acestui telefon</Text>
-<TouchableOpacity style={[s.roleCard,{borderColor:C.c1}]} onPress={()=>setMode('A')}>
+<TouchableOpacity style={[s.roleCard,{borderColor:C.c1}]} onPress={()=>{setMode('A');try{AsyncStorage.setItem('role','A');}catch(e){}}}>
 <Text style={s.roleIcon}>📱</Text>
 <Text style={[s.roleTitle,{color:C.c1}]}>TELEFON A</Text>
 <Text style={s.roleDesc}>Lângă POS / ATM</Text>
 <Text style={s.roleDesc2}>Emulează cardul automat</Text>
 </TouchableOpacity>
-<TouchableOpacity style={[s.roleCard,{borderColor:C.c3,marginTop:20}]} onPress={()=>setMode('B')}>
+<TouchableOpacity style={[s.roleCard,{borderColor:C.c3,marginTop:20}]} onPress={()=>{setMode('B');try{AsyncStorage.setItem('role','B');}catch(e){}}}>
 <Text style={s.roleIcon}>💳</Text>
 <Text style={[s.roleTitle,{color:C.c3}]}>TELEFON B</Text>
 <Text style={s.roleDesc}>Lângă cardul fizic</Text>
