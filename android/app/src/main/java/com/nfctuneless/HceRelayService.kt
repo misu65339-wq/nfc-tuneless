@@ -1,5 +1,6 @@
 package com.nfctuneless
 
+import android.app.Application
 import android.content.Context
 import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
@@ -14,14 +15,11 @@ class HceRelayService : HostApduService() {
 
         @Volatile var isActive = false
         @Volatile var appContext: Context? = null
-
-        // Callback simplu - fara queue, fara thread
         var onApduReceived: ((String, String) -> Unit)? = null
 
-        // Response queue thread-safe
         val responseLock = java.util.concurrent.locks.ReentrantLock()
         val responseCondition = responseLock.newCondition()
-        var pendingResponse: ByteArray? = null
+        @Volatile var pendingResponse: ByteArray? = null
 
         fun deliverResponse(apduHex: String) {
             responseLock.lock()
@@ -42,36 +40,33 @@ class HceRelayService : HostApduService() {
 
     override fun onCreate() {
         super.onCreate()
-        appContext = applicationContext
-        Log.d(TAG, "HCE Service creat")
+        try { appContext = applicationContext } catch (e: Exception) {}
+        Log.d(TAG, "onCreate")
     }
 
     override fun processCommandApdu(apdu: ByteArray?, extras: Bundle?): ByteArray {
-        // NICIODATA nu arunca exceptie din aceasta functie
+        // Seteaza context la fiecare apel - safety
+        try { if (appContext == null) appContext = applicationContext } catch (e: Exception) {}
+
+        // Nu crasa niciodata - returneaza intotdeauna un raspuns valid
+        if (apdu == null || apdu.isEmpty()) return SW_ERR
+
         return try {
-            if (apdu == null || apdu.isEmpty()) return SW_ERR
-
-            val apduHex = try {
-                apdu.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
-            } catch (e: Exception) { return SW_ERR }
-
+            val apduHex = apdu.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
             Log.d(TAG, "APDU: $apduHex active=$isActive")
 
-            // Daca nu e activ - raspunde local imediat
+            // Daca nu e activ - raspunde local imediat fara crash
             if (!isActive) return processLocally(apduHex)
 
-            // Daca nu avem callback - raspunde local
             val cb = onApduReceived ?: return processLocally(apduHex)
 
-            // Trimite la JS
             responseLock.lock()
             try {
                 pendingResponse = null
 
-                // Invocare callback pe thread curent - mai sigur pe Samsung
-                try {
-                    cb.invoke(System.currentTimeMillis().toString(), apduHex)
-                } catch (e: Exception) {
+                // Invocare callback
+                try { cb.invoke(System.currentTimeMillis().toString(), apduHex) }
+                catch (e: Exception) {
                     Log.e(TAG, "CB error: ${e.message}")
                     return processLocally(apduHex)
                 }
@@ -90,9 +85,8 @@ class HceRelayService : HostApduService() {
             }
 
         } catch (e: Exception) {
-            // NICIODATA nu crasa - returneaza SW_ERR
-            Log.e(TAG, "processCommandApdu error: ${e.message}")
-            SW_ERR
+            Log.e(TAG, "Error: ${e.message}")
+            SW_ERR // NICIODATA nu crasa
         }
     }
 
@@ -104,9 +98,7 @@ class HceRelayService : HostApduService() {
                     0x4E, 0x46, 0x43, 0x54, 0x55, 0x4C,
                     0x90.toByte(), 0x00
                 )
-                apduHex.startsWith("80A800") -> byteArrayOf(
-                    0x77, 0x00, 0x90.toByte(), 0x00
-                )
+                apduHex.startsWith("80A800") -> byteArrayOf(0x77, 0x00, 0x90.toByte(), 0x00)
                 apduHex.startsWith("00B2") -> SW_OK
                 else -> SW_OK
             }
@@ -122,7 +114,6 @@ class HceRelayService : HostApduService() {
             } finally {
                 responseLock.unlock()
             }
-            Log.d(TAG, "Dezactivat: $reason")
         } catch (e: Exception) {}
     }
 }
