@@ -67,10 +67,6 @@
         android:foregroundServiceType="connectedDevice|dataSync"
         android:exported="false"
         android:stopWithTask="false"/>
-    <activity
-        android:name=".HceActivity"
-        android:theme="@android:style/Theme.Translucent.NoTitleBar"
-        android:exported="false"/>
   
     <service
         android:name=".HceRelayService"
