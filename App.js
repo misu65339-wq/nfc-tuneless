@@ -67,17 +67,23 @@ setLoading(false);
 
 // NFC Init
 useEffect(()=>{
-(async()=>{
+let mounted=true;
+const initNfc=async()=>{
 try{
+await new Promise(r=>setTimeout(r,1000));
 let ok=false;
 try{ok=await NfcManager.isSupported();}catch(e){ok=true;}
 setNfcOk(ok);
-if(ok){try{await NfcManager.start();}catch(e){}}
+if(ok){
+try{await NfcManager.start();}catch(e){}
+}
 }catch(e){}
-})();
+};
+initNfc();
 return()=>{
+mounted=false;
 autoRestartRef.current=false;
-NfcManager.cancelTechnologyRequest().catch(()=>{});
+try{NfcManager.cancelTechnologyRequest();}catch(e){}
 if(keepAliveRef.current)clearInterval(keepAliveRef.current);
 };
 },[]);
