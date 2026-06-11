@@ -1,62 +1,77 @@
 package com.nfctuneless
 
+import android.content.Context
 import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.TimeUnit
 
 class HceRelayService : HostApduService() {
 
     companion object {
         const val TAG = "HceRelayService"
-        val SW_OK   = byteArrayOf(0x90.toByte(), 0x00.toByte())
-        val SW_ERR  = byteArrayOf(0x6F.toByte(), 0x00.toByte())
+        val SW_OK  = byteArrayOf(0x90.toByte(), 0x00.toByte())
+        val SW_ERR = byteArrayOf(0x6F.toByte(), 0x00.toByte())
 
-        val responseQueue = LinkedBlockingQueue<ByteArray>(1)
+        @Volatile var isActive = false
+        @Volatile var appContext: Context? = null
         var onApduReceived: ((String, String) -> Unit)? = null
-        var isActive = false
+
+        val responseLock = java.util.concurrent.locks.ReentrantLock()
+        val responseCondition = responseLock.newCondition()
+        @Volatile var pendingResponse: ByteArray? = null
 
         fun deliverResponse(apduHex: String) {
+            responseLock.lock()
             try {
-                if (apduHex.isEmpty()) { responseQueue.offer(SW_ERR); return }
-                val clean = apduHex.trim().replace(" ", "")
-                if (clean.length % 2 != 0) { responseQueue.offer(SW_ERR); return }
-                val bytes = ByteArray(clean.length / 2)
-                for (i in bytes.indices) {
-                    bytes[i] = clean.substring(i * 2, i * 2 + 2).toInt(16).toByte()
-                }
-                responseQueue.offer(bytes)
-            } catch (e: Exception) {
-                Log.e(TAG, "deliverResponse error: ${e.message}")
-                responseQueue.offer(SW_ERR)
+                pendingResponse = try {
+                    val clean = apduHex.trim().replace(" ", "")
+                    if (clean.isEmpty() || clean.length % 2 != 0) SW_ERR
+                    else ByteArray(clean.length / 2) { i ->
+                        clean.substring(i * 2, i * 2 + 2).toInt(16).toByte()
+                    }
+                } catch (e: Exception) { SW_ERR }
+                responseCondition.signalAll()
+            } finally {
+                responseLock.unlock()
             }
         }
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        try { appContext = applicationContext } catch (e: Exception) {}
+        Log.d(TAG, "HCE Service creat")
+    }
+
     override fun processCommandApdu(apdu: ByteArray?, extras: Bundle?): ByteArray {
+        try { if (appContext == null) appContext = applicationContext } catch (e: Exception) {}
         if (apdu == null || apdu.isEmpty()) return SW_ERR
+
         return try {
             val apduHex = apdu.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
             Log.d(TAG, "APDU: $apduHex active=$isActive")
 
             if (!isActive) return processLocally(apduHex)
-
             val cb = onApduReceived ?: return processLocally(apduHex)
 
-            responseQueue.clear()
-
-            Handler(Looper.getMainLooper()).post {
+            responseLock.lock()
+            try {
+                pendingResponse = null
                 try { cb.invoke(System.currentTimeMillis().toString(), apduHex) }
-                catch (e: Exception) { Log.e(TAG, "callback error: ${e.message}"); responseQueue.offer(SW_ERR) }
+                catch (e: Exception) { return processLocally(apduHex) }
+
+                val deadline = System.currentTimeMillis() + 3000
+                while (pendingResponse == null) {
+                    val remaining = deadline - System.currentTimeMillis()
+                    if (remaining <= 0) break
+                    responseCondition.await(remaining, java.util.concurrent.TimeUnit.MILLISECONDS)
+                }
+                pendingResponse ?: processLocally(apduHex)
+            } finally {
+                responseLock.unlock()
             }
-
-            responseQueue.poll(4500, TimeUnit.MILLISECONDS) ?: processLocally(apduHex)
-
         } catch (e: Exception) {
-            Log.e(TAG, "processCommandApdu crash: ${e.message}")
+            Log.e(TAG, "Error: ${e.message}")
             SW_ERR
         }
     }
@@ -70,13 +85,17 @@ class HceRelayService : HostApduService() {
                     0x90.toByte(), 0x00
                 )
                 apduHex.startsWith("80A800") -> byteArrayOf(0x77, 0x00, 0x90.toByte(), 0x00)
+                apduHex.startsWith("00B2") -> SW_OK
                 else -> SW_OK
             }
         } catch (e: Exception) { SW_ERR }
     }
 
     override fun onDeactivated(reason: Int) {
-        Log.d(TAG, "onDeactivated: $reason")
-        try { responseQueue.clear() } catch (e: Exception) {}
+        try {
+            responseLock.lock()
+            try { pendingResponse = SW_ERR; responseCondition.signalAll() }
+            finally { responseLock.unlock() }
+        } catch (e: Exception) {}
     }
 }
