@@ -10,6 +10,12 @@ function bH(b=[]){return Array.from(b).map(x=>(x&0xFF).toString(16).toUpperCase(
 function hB(h=''){const c=h.replace(/\s/g,'');return Array.from({length:c.length/2},(_,i)=>parseInt(c.substring(i*2,i*2+2),16))}
 function fT(ts){const d=new Date(ts);return`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`}
 
+async function resetNfcManager(){
+try{await NfcManager.cancelTechnologyRequest();}catch(e){}
+try{await NfcManager.unregisterTagEvent();}catch(e){}
+await new Promise(r=>setTimeout(r,300));
+}
+
 export default function App(){
 const[mode,setMode]=useState(null);
 const ws=useRef(null);
@@ -23,7 +29,6 @@ const myIdRef=useRef(null);
 const modeRef=useRef(null);
 const connectingCard=useRef(false);
 const connectingHce=useRef(false);
-const cardTagRef=useRef(null);
 
 const[st,setSt]=useState('disconnected');
 const[myId,setMyId]=useState(null);
@@ -62,64 +67,53 @@ try{NfcManager.cancelTechnologyRequest();}catch(e){}
 };
 },[]);
 
-// Disconnect card - reset complet
-const disconnectCard=useCallback(async(manual=false)=>{
-readerRelay.current=false;
-isoDepRef.current=null;
-cardTagRef.current=null;
-setCardOk(false);
-try{await NfcManager.cancelTechnologyRequest();}catch(e){}
-try{await NfcManager.unregisterTagEvent();}catch(e){}
-try{await NfcManager.stop();}catch(e){}
-await new Promise(r=>setTimeout(r,500));
-try{await NfcManager.start();}catch(e){}
-if(manual)addLog('Card deconectat manual',C.c2);
-},[addLog]);
-
-// Connect card fizic - fara keepalive, fara bip
+// Connect card fizic
 const connectCard=useCallback(async()=>{
 if(connectingCard.current)return;
 connectingCard.current=true;
 
-try{
-await disconnectCard();
-await new Promise(r=>setTimeout(r,300));
-addLog('Așteaptă card...',C.t2);
-
-await NfcManager.requestTechnology([NfcTech.IsoDep],{isReaderModeEnabled:false});
-const tag=await NfcManager.getTag();
-if(!tag){throw new Error('Tag null');}
-
-isoDepRef.current=tag;
-cardTagRef.current=tag;
-readerRelay.current=true;
-setCardOk(true);
-addLog('✅ Card conectat! Relay activ.',C.c3);
-
-// Detecteaza deconectare card prin listener
-NfcManager.setEventListener('sessionClosed',async()=>{
-if(!readerRelay.current)return;
+// Reset NFC
 readerRelay.current=false;
 isoDepRef.current=null;
 setCardOk(false);
-addLog('Card îndepărtat! Reconectare...',C.c4);
-connectingCard.current=false;
-if(autoRestartRef.current)setTimeout(()=>connectCard(),500);
-});
+await resetNfcManager();
 
+try{
+addLog('Așteaptă card...',C.t2);
+await NfcManager.requestTechnology([NfcTech.IsoDep]);
+const tag=await NfcManager.getTag();
+if(!tag)throw new Error('Tag null');
+isoDepRef.current=tag;
+readerRelay.current=true;
+setCardOk(true);
+connectingCard.current=false;
+addLog('✅ Card conectat! Relay activ.',C.c3);
 }catch(e){
-await disconnectCard();
+readerRelay.current=false;
+isoDepRef.current=null;
+setCardOk(false);
+await resetNfcManager();
+connectingCard.current=false;
 if(e.message!=='cancelled'&&e.message!=='Tag null'){
 addLog(`Eroare: ${e.message}`,C.c4);
 }
 if(autoRestartRef.current){
-connectingCard.current=false;
 setTimeout(()=>connectCard(),1000);
-return;
 }
 }
+},[addLog]);
+
+// Disconnect card manual
+const disconnectCard=useCallback(async()=>{
+autoRestartRef.current=false;
+readerRelay.current=false;
+isoDepRef.current=null;
+setCardOk(false);
 connectingCard.current=false;
-},[disconnectCard,addLog]);
+await resetNfcManager();
+addLog('Card deconectat manual',C.c2);
+setTimeout(()=>{autoRestartRef.current=true;},500);
+},[addLog]);
 
 // Stop HCE
 const stopHce=useCallback(()=>{
@@ -189,13 +183,8 @@ if(hceActive)stopHce();else startHce();
 },[hceActive,startHce,stopHce]);
 
 const toggleCard=useCallback(async()=>{
-if(cardOk){
-autoRestartRef.current=false;
-await disconnectCard(true);
-setTimeout(()=>{autoRestartRef.current=true;},1000);
-}else{
-await connectCard();
-}
+if(cardOk){await disconnectCard();}
+else{await connectCard();}
 },[cardOk,connectCard,disconnectCard]);
 
 // WebSocket
@@ -384,7 +373,7 @@ disabled={st!=='connected'}>
 <TouchableOpacity style={s.changeRole} onPress={async()=>{
 autoRestartRef.current=false;
 stopHce();
-await disconnectCard(true);
+await disconnectCard();
 if(ws.current){ws.current.close();ws.current=null;}
 setSt('disconnected');setMode(null);
 }}>
