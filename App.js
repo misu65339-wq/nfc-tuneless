@@ -115,6 +115,8 @@ isoDepRef.current=tag;
 readerRelay.current=true;
 setCardOk(true);
 addLog('✅ Card conectat! Relay activ.',C.c3);
+try{NfcManager.setNdefPushMessage(null);}catch(e){}
+try{NfcManager.disableNdefPush();}catch(e){}
 
 // Keepalive card
 keepAliveRef.current=null;
