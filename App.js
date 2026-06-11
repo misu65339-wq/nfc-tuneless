@@ -124,7 +124,7 @@ keepAliveRef.current=null;
 return;
 }
 try{
-await NfcManager.isoDepHandler.transceive(hB('0084000004'));
+await NfcManager.isoDepHandler.transceive(hB('00C0000000'));
 }catch(e){
 clearInterval(keepAliveRef.current);
 keepAliveRef.current=null;
