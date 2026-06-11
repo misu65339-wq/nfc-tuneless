@@ -12,7 +12,6 @@ function fT(ts){const d=new Date(ts);return`${String(d.getHours()).padStart(2,'0
 
 async function resetNfcManager(){
 try{await NfcManager.cancelTechnologyRequest();}catch(e){}
-try{await NfcManager.unregisterTagEvent();}catch(e){}
 await new Promise(r=>setTimeout(r,300));
 }
 
