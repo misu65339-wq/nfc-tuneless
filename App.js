@@ -116,29 +116,7 @@ readerRelay.current=true;
 setCardOk(true);
 addLog('✅ Card conectat! Relay activ.',C.c3);
 
-// Keepalive card
-keepAliveRef.current=setInterval(async()=>{
-if(!readerRelay.current){
-clearInterval(keepAliveRef.current);
 keepAliveRef.current=null;
-return;
-}
-try{
-await NfcManager.isoDepHandler.transceive(hB('0084000004'));
-}catch(e){
-clearInterval(keepAliveRef.current);
-keepAliveRef.current=null;
-readerRelay.current=false;
-isoDepRef.current=null;
-setCardOk(false);
-addLog('Card deconectat! Reconectare...',C.c4);
-await resetNfc();
-if(autoRestartRef.current){
-connectingCard.current=false;
-setTimeout(()=>connectCard(),500);
-}
-}
-},2000);
 
 }catch(e){
 await disconnectCard();
