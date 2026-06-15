@@ -18,6 +18,18 @@ export default class WebRTCClient {
       ]
     });
 
+    this.pc.oniceconnectionstatechange = () => {
+      this.onStatus("ICE STATE: " + this.pc.iceConnectionState);
+    };
+
+    this.pc.onconnectionstatechange = () => {
+      this.onStatus("PC STATE: " + this.pc.connectionState);
+    };
+
+    this.pc.onsignalingstatechange = () => {
+      this.onStatus("SIGNAL STATE: " + this.pc.signalingState);
+    };
+
     this.pc.onicecandidate = event => {
       if (event.candidate) {
         this.onStatus("TRIMIT ICE");
