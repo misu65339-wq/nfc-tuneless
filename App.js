@@ -1,3 +1,4 @@
+import WebRTCClient from "./webrtc";
 import{useState,useRef,useEffect,useCallback}from'react';
 import{AsyncStorage}from'react-native';
 import{View,Text,TouchableOpacity,ScrollView,StyleSheet,StatusBar,NativeModules,NativeEventEmitter,Platform,AppState}from'react-native';
@@ -25,6 +26,7 @@ export default function App(){
 const[mode,setMode]=useState(null);
 const[loading,setLoading]=useState(true);
 const ws=useRef(null);
+const rtc=useRef(null);
 const pending=useRef({});
 const isoDepRef=useRef(null);
 const readerRelay=useRef(false);
@@ -215,7 +217,14 @@ setStats(p=>({...p,fail:p.fail+1}));
 addLog('TIMEOUT!',C.c4);
 },4500)
 };
-ws.current.send(JSON.stringify({type:'APDU_RELAY_REQUEST',targetClientId:target.id,apdu,requestId}));
+const relayMsg={type:'APDU_RELAY_REQUEST',targetClientId:target.id,apdu,requestId};
+if(rtc.current?.channel?.readyState==='open'){
+rtc.current.send(JSON.stringify(relayMsg));
+addLog('APDU trimis prin WebRTC',C.c3);
+}else{
+ws.current.send(JSON.stringify(relayMsg));
+addLog('APDU trimis prin WebSocket fallback',C.c2);
+}
 }else{
 try{HceModule.deliverResponse(requestId,'6F00');}catch(e){}
 addLog(target?'Server deconectat!':'Telefon B lipsă!',C.c4);
@@ -258,15 +267,62 @@ const s=new WebSocket(SERVER_URL);
 ws.current=s;
 s.onopen=()=>{
 setSt('connected');
+
+rtc.current=new WebRTCClient(
+  msg=>ws.current?.send(JSON.stringify(msg)),
+  async data=>{
+    try{
+      const m=JSON.parse(data);
+      addLog('WebRTC primit: '+(m.type||'date'),C.c3);
+
+      if(m.type==='APDU_RELAY_REQUEST'){
+        if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
+          try{
+            const resp=await NfcManager.isoDepHandler.transceive(hB(m.apdu||''));
+            const respHex=bH(resp);
+            const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex};
+            if(rtc.current?.channel?.readyState==='open')rtc.current.send(JSON.stringify(response));
+            else ws.current?.send(JSON.stringify(response));
+            addLog(`Card→RTC ${respHex.slice(0,16)}`,C.c3);
+          }catch(e){
+            const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:'6F00'};
+            if(rtc.current?.channel?.readyState==='open')rtc.current.send(JSON.stringify(response));
+            else ws.current?.send(JSON.stringify(response));
+            addLog(`Card RTC ERR: ${e.message}`,C.c4);
+            await disconnectCard();
+            if(autoRestartRef.current)setTimeout(()=>connectCard(),500);
+          }
+        }
+      }
+
+      if(m.type==='APDU_RELAY_RESPONSE'){
+        const p=pending.current[m.requestId];
+        if(p){clearTimeout(p.timer);p.resolve(m.apdu);delete pending.current[m.requestId];}
+      }
+
+      if(m.type==='APDU_RELAY_ERROR'){
+        const p=pending.current[m.requestId];
+        if(p){clearTimeout(p.timer);p.reject();delete pending.current[m.requestId];}
+      }
+
+    }catch(err){
+      addLog('WebRTC primit date invalide',C.c4);
+    }
+  }
+);
+
 const r=modeRef.current==='A'?'emulator':'reader';
 s.send(JSON.stringify({type:'REGISTER',role:r,info:{device:`NFC Tuneless ${modeRef.current}`}}));
 s.send(JSON.stringify({type:'GET_CLIENTS'}));
-addLog('✅ Conectat la server',C.c3);
+addLog('✅ Conectat la server + WebRTC pregătit',C.c3);
 if(Platform.OS==='android'){
 const{HceModule}=NativeModules;
 HceModule?.startForegroundService&&HceModule.startForegroundService();
 }
-if(modeRef.current==='A')setTimeout(()=>startHce(),1500);
+if(modeRef.current==='A'){
+setTimeout(()=>startHce(),1500);
+setTimeout(()=>rtc.current?.createOffer(),2500);
+}
 else if(modeRef.current==='B')setTimeout(()=>connectCard(),1500);
 };
 s.onclose=()=>{
@@ -279,6 +335,15 @@ s.onmessage=(e)=>{
 try{
 const m=JSON.parse(e.data);
 switch(m.type){
+case 'offer':
+rtc.current?.handleOffer(m.offer);
+break;
+case 'answer':
+rtc.current?.handleAnswer(m.answer);
+break;
+case 'ice':
+rtc.current?.handleIce(m.candidate);
+break;
 case 'CONNECTED':setMyId(m.clientId);myIdRef.current=m.clientId;break;
 case 'SERVER_STATE':case 'CLIENTS_LIST':
 const f=(m.clients||[]).filter(c=>c.id!==myIdRef.current);

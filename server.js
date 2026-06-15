@@ -1,163 +1,38 @@
-const WebSocket = require('ws');
-const http = require('http');
+const WebSocket = require("ws");
 
 const PORT = 8080;
-const clients = new Map();
-const pins = new Map(); // pin -> wsUrl
-
-function genPin() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-let currentPin = genPin();
-let currentUrl = '';
-
-console.log(`PIN initial: ${currentPin}`);
-
 const wss = new WebSocket.Server({ port: PORT });
+const rooms = new Map();
 
-function broadcast(obj, excludeId = null) {
-  clients.forEach(({ ws }, id) => {
-    if (id !== excludeId && ws.readyState === WebSocket.OPEN)
-      ws.send(JSON.stringify(obj));
-  });
-}
-
-function broadcastState() {
-  broadcast({
-    type: 'SERVER_STATE',
-    clients: [...clients.entries()].map(([id, c]) => ({
-      id, role: c.role, info: c.info, connectedAt: c.connectedAt,
-    })),
-    pin: currentPin,
-    url: currentUrl,
-  });
-}
-
-
-// Keep-alive ping la fiecare 10 secunde
-setInterval(() => {
-  wss.clients.forEach((client) => {
-    if (client.readyState === 1) {
-      client.ping();
-    }
-  });
-}, 10000);
-
-wss.on('connection', (ws) => {
-  ws.on('pong', () => { ws.isAlive = true; });
-
-  const id = Math.random().toString(36).slice(2) + Date.now();
-  clients.set(id, { ws, role: 'reader', info: {}, connectedAt: Date.now() });
-  console.log(`[+] ${id.slice(0,8)} total=${clients.size}`);
-
-  ws.send(JSON.stringify({
-    type: 'CONNECTED',
-    clientId: id,
-    pin: currentPin,
-    url: currentUrl,
-  }));
-  broadcastState();
-
-  ws.on('message', (data) => {
+wss.on("connection", ws => {
+  ws.on("message", raw => {
     let msg;
-    try { msg = JSON.parse(data); } catch { return; }
-    switch (msg.type) {
-      case 'REGISTER':
-        const c = clients.get(id);
-        if (c) { c.role = msg.role || 'reader'; c.info = msg.info || {}; }
-        broadcastState();
-        break;
+    try { msg = JSON.parse(raw); } catch { return; }
 
-      case 'SET_URL':
-        currentUrl = msg.url || '';
-        currentPin = genPin();
-        console.log(`URL: ${currentUrl} | PIN: ${currentPin}`);
-        broadcastState();
-        break;
+    if (msg.type === "join") {
+      ws.room = msg.room;
+      if (!rooms.has(ws.room)) rooms.set(ws.room, new Set());
+      rooms.get(ws.room).add(ws);
+      ws.send(JSON.stringify({ type: "joined", room: ws.room }));
+      return;
+    }
 
-      case 'GET_PIN':
-        ws.send(JSON.stringify({ type: 'PIN_INFO', pin: currentPin, url: currentUrl }));
-        break;
+    if (!ws.room) return;
 
-      case 'NFC_TAG_READ':
-        broadcast({ type: 'NFC_TAG_READ', ...msg, fromClient: id });
-        break;
-
-      case 'APDU_RELAY_REQUEST': {
-        const target = clients.get(msg.targetClientId);
-        if (!target) {
-          ws.send(JSON.stringify({ type: 'APDU_RELAY_ERROR', requestId: msg.requestId, error: 'TARGET_NOT_FOUND' }));
-          return;
-        }
-        const timer = setTimeout(() => {
-          ws.send(JSON.stringify({ type: 'APDU_RELAY_ERROR', requestId: msg.requestId, error: 'TIMEOUT' }));
-        }, 5000);
-        target.ws._pending = { requesterWs: ws, timer };
-        target.ws.send(JSON.stringify({
-          type: 'APDU_COMMAND', apdu: msg.apdu,
-          requestId: msg.requestId, fromClientId: id
-        }));
-        break;
+    for (const peer of rooms.get(ws.room) || []) {
+      if (peer !== ws && peer.readyState === WebSocket.OPEN) {
+        peer.send(JSON.stringify(msg));
       }
-
-      case 'APDU_RELAY_RESPONSE': {
-        clients.forEach(({ ws: cws }) => {
-          if (cws._pending) {
-            clearTimeout(cws._pending.timer);
-            cws._pending.requesterWs.send(JSON.stringify({
-              type: 'APDU_RELAY_RESPONSE',
-              requestId: msg.requestId,
-              apdu: msg.apdu,
-              fromClientId: id
-            }));
-            delete cws._pending;
-          }
-        });
-        break;
-      }
-
-      case 'GET_CLIENTS':
-        ws.send(JSON.stringify({
-          type: 'CLIENTS_LIST',
-          clients: [...clients.entries()].map(([i, c]) => ({
-            id: i, role: c.role, info: c.info, connectedAt: c.connectedAt
-          }))
-        }));
-        break;
-
-      case 'BROADCAST':
-        broadcast({ type: 'BROADCAST', from: id, data: msg.data }, id);
-        break;
     }
   });
 
-  ws.on('close', () => {
-    clients.delete(id);
-    console.log(`[-] ${id.slice(0,8)} total=${clients.size}`);
-    broadcast({ type: 'CLIENT_DISCONNECTED', clientId: id });
-    broadcastState();
+  ws.on("close", () => {
+    if (ws.room && rooms.has(ws.room)) {
+      rooms.get(ws.room).delete(ws);
+    }
   });
 });
 
-console.log(`NFC Tuneless Server pe port ${PORT}`);
+console.log(`WebRTC signaling server running on port ${PORT}`);
+0
 
-// HTTP endpoint pentru URL update
-const httpServer = require('http').createServer((req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  if (req.url.startsWith('/seturl')) {
-    const url = new URL('http://localhost' + req.url).searchParams.get('url');
-    if (url) {
-      currentUrl = url;
-      currentPin = genPin();
-      console.log(`\n🔗 URL: ${url}\n🔑 PIN: ${currentPin}\n`);
-      broadcastState();
-    }
-    res.end('OK');
-  } else if (req.url === '/pin') {
-    res.end(JSON.stringify({ pin: currentPin, url: currentUrl }));
-  } else {
-    res.end('NFC Tuneless Server');
-  }
-});
-httpServer.listen(8081, () => console.log('HTTP pe port 8081'));
