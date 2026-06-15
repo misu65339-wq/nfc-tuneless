@@ -308,7 +308,6 @@ rtc.current=new WebRTCClient(
     }catch(err){
       addLog('WebRTC primit date invalide',C.c4);
     }
-  }
   },
   status=>{
     if(status==='WEBRTC_OPEN')addLog('🟢 WebRTC DataChannel deschis',C.c3);
