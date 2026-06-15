@@ -326,7 +326,7 @@ HceModule?.startForegroundService&&HceModule.startForegroundService();
 }
 if(modeRef.current==='A'){
 setTimeout(()=>startHce(),1500);
-setTimeout(()=>rtc.current?.createOffer(),2500);
+setTimeout(()=>{addLog('🚀 Pornesc WebRTC offer',C.c2);rtc.current?.createOffer();},2500);
 }
 else if(modeRef.current==='B')setTimeout(()=>connectCard(),1500);
 };
