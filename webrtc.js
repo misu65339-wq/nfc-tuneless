@@ -20,6 +20,7 @@ export default class WebRTCClient {
 
     this.pc.onicecandidate = event => {
       if (event.candidate) {
+        this.onStatus("TRIMIT ICE");
         this.sendSignal({
           type: "ice",
           candidate: event.candidate
@@ -57,6 +58,7 @@ export default class WebRTCClient {
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
 
+    this.onStatus("TRIMIT OFFER");
     this.sendSignal({
       type: "offer",
       offer
@@ -64,6 +66,7 @@ export default class WebRTCClient {
   }
 
   async handleOffer(offer) {
+    this.onStatus("PRIMIT OFFER");
     await this.pc.setRemoteDescription(
       new RTCSessionDescription(offer)
     );
@@ -71,6 +74,7 @@ export default class WebRTCClient {
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
 
+    this.onStatus("TRIMIT ANSWER");
     this.sendSignal({
       type: "answer",
       answer
@@ -78,12 +82,14 @@ export default class WebRTCClient {
   }
 
   async handleAnswer(answer) {
+    this.onStatus("PRIMIT ANSWER");
     await this.pc.setRemoteDescription(
       new RTCSessionDescription(answer)
     );
   }
 
   async handleIce(candidate) {
+    this.onStatus("PRIMIT ICE");
     try {
       await this.pc.addIceCandidate(
         new RTCIceCandidate(candidate)
