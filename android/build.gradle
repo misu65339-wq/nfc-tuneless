@@ -38,3 +38,11 @@ allprojects {
         maven { url 'https://www.jitpack.io' }
     }
 }
+
+
+allprojects {
+    configurations.all {
+        resolutionStrategy.force 'org.jitsi:webrtc:124.0.0'
+    }
+}
+
