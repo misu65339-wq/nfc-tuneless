@@ -5,9 +5,10 @@ import {
 } from "react-native-webrtc";
 
 export default class WebRTCClient {
-  constructor(sendSignal, onMessage) {
+  constructor(sendSignal, onMessage, onStatus = () => {}) {
     this.sendSignal = sendSignal;
     this.onMessage = onMessage;
+    this.onStatus = onStatus;
     this.channel = null;
 
     this.pc = new RTCPeerConnection({
@@ -28,6 +29,7 @@ export default class WebRTCClient {
 
     this.pc.ondatachannel = event => {
       this.channel = event.channel;
+      this.onStatus("WEBRTC_CHANNEL_RECEIVED");
       this.setupChannel();
     };
   }
@@ -35,6 +37,7 @@ export default class WebRTCClient {
   setupChannel() {
     this.channel.onopen = () => {
       console.log("DataChannel OPEN");
+      this.onStatus("WEBRTC_OPEN");
     };
 
     this.channel.onmessage = event => {
@@ -43,6 +46,7 @@ export default class WebRTCClient {
 
     this.channel.onclose = () => {
       console.log("DataChannel CLOSED");
+      this.onStatus("WEBRTC_CLOSED");
     };
   }
 

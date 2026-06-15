@@ -309,8 +309,14 @@ rtc.current=new WebRTCClient(
       addLog('WebRTC primit date invalide',C.c4);
     }
   }
+  },
+  status=>{
+    if(status==='WEBRTC_OPEN')addLog('🟢 WebRTC DataChannel deschis',C.c3);
+    else if(status==='WEBRTC_CLOSED')addLog('🔴 WebRTC DataChannel închis',C.c4);
+    else if(status==='WEBRTC_CHANNEL_RECEIVED')addLog('📡 WebRTC canal primit',C.c2);
+    else addLog('WebRTC: '+status,C.c2);
+  }
 );
-
 const r=modeRef.current==='A'?'emulator':'reader';
 s.send(JSON.stringify({type:'REGISTER',role:r,info:{device:`NFC Tuneless ${modeRef.current}`}}));
 s.send(JSON.stringify({type:'GET_CLIENTS'}));
