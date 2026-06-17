@@ -13,8 +13,22 @@ export default class WebRTCClient {
 
     this.pc = new RTCPeerConnection({
       iceServers: [
+        // STUN ajută telefoanele să încerce conexiune directă rapidă.
         { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" }
+
+        // TURN UDP prin VPS-ul nostru; acesta rezolvă conexiunile 4G/5G cu NAT strict.
+        {
+          urls: "turn:84.252.120.21:3478?transport=udp",
+          username: "nfctuneless",
+          credential: "Panamera2021Panamera!"
+        },
+
+        // TURN TCP ca rezervă dacă UDP este blocat de rețea.
+        {
+          urls: "turn:84.252.120.21:3478?transport=tcp",
+          username: "nfctuneless",
+          credential: "Panamera2021Panamera!"
+        }
       ]
     });
 
