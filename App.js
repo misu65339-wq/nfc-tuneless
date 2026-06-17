@@ -260,7 +260,10 @@ await connectCard();
 
 // WebSocket connect
 const connect=useCallback(()=>{
-if(ws.current&&ws.current.readyState===1){ws.current.close();ws.current=null;return;}
+if(ws.current&&ws.current.readyState===1){
+addLog('WebSocket deja conectat - ignor connect duplicat',C.c2);
+return;
+}
 setSt('connecting');
 try{
 const s=new WebSocket(SERVER_URL);
