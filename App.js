@@ -113,6 +113,20 @@ await NfcManager.requestTechnology([NfcTech.IsoDep]);
 const tag=await NfcManager.getTag();
 if(!tag)throw new Error('Tag null');
 
+addLog('[B] TAG detectat',C.c3);
+
+if(tag.id){
+addLog(`[B] UID: ${tag.id}`,C.c2);
+}
+
+if(tag.techTypes){
+addLog(`[B] TECH: ${tag.techTypes.join(', ')}`,C.c2);
+}
+
+try{
+addLog(`[B] TAG JSON: ${JSON.stringify(tag).slice(0,200)}`,C.c2);
+}catch(e){}
+
 isoDepRef.current=tag;
 readerRelay.current=true;
 setCardOk(true);
@@ -282,8 +296,12 @@ rtc.current=new WebRTCClient(
         addLog(`[B] APDU primit de la A: ${(m.apdu||'').slice(0,40)}`,C.c2);
         if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
           try{
+            addLog(`[B] APDU -> TAG: ${(m.apdu||'').slice(0,80)}`,C.c2);
+
             const resp=await NfcManager.isoDepHandler.transceive(hB(m.apdu||''));
             const respHex=bH(resp);
+
+            addLog(`[B] TAG -> APDU: ${respHex.slice(0,80)}`,C.c3);
             const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex};
             if(rtc.current?.channel?.readyState==='open')rtc.current.send(JSON.stringify(response));
             else ws.current?.send(JSON.stringify(response));
