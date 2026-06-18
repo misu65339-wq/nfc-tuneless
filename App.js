@@ -117,8 +117,20 @@ addLog('[B] TAG detectat',C.c3);
 
 if(tag.id){
 addLog(`[B] UID: ${tag.id}`,C.c2);
+if(tag.techTypes)addLog(`[B] TECH: ${tag.techTypes.join(', ')}`,C.c2);
+if(tag.atqa||tag.ATQA)addLog(`[B] ATQA: ${tag.atqa||tag.ATQA}`,C.c2);
+if(tag.sak||tag.SAK)addLog(`[B] SAK: ${tag.sak||tag.SAK}`,C.c2);
+if(tag.ats||tag.ATS)addLog(`[B] ATS: ${tag.ats||tag.ATS}`,C.c2);
 
-const tagInfoMsg={type:'NFC_TAG_READ',uid:tag.id};
+const tagInfoMsg={
+type:'NFC_TAG_READ',
+uid:tag.id,
+techTypes:tag.techTypes||[],
+atqa:tag.atqa||tag.ATQA||null,
+sak:tag.sak||tag.SAK||null,
+ats:tag.ats||tag.ATS||null,
+tagRaw:tag
+};
 if(rtc.current?.channel?.readyState==='open'){
 rtc.current.send(JSON.stringify(tagInfoMsg));
 addLog('[B] TAG trimis către A prin WebRTC',C.c3);
@@ -324,6 +336,10 @@ rtc.current=new WebRTCClient(
         if(modeRef.current==='A'){
           addLog(`[A] TAG primit de la B`,C.c3);
           if(m.uid)addLog(`[A] UID: ${m.uid}`,C.c2);
+if(m.techTypes)addLog(`[A] TECH: ${m.techTypes.join(', ')}`,C.c2);
+if(m.atqa)addLog(`[A] ATQA: ${m.atqa}`,C.c2);
+if(m.sak)addLog(`[A] SAK: ${m.sak}`,C.c2);
+if(m.ats)addLog(`[A] ATS: ${m.ats}`,C.c2);
         }
       }
 
@@ -391,6 +407,10 @@ case 'NFC_TAG_READ':
 if(modeRef.current==='A'){
 addLog(`[A] TAG primit de la B`,C.c3);
 if(m.uid)addLog(`[A] UID: ${m.uid}`,C.c2);
+if(m.techTypes)addLog(`[A] TECH: ${m.techTypes.join(', ')}`,C.c2);
+if(m.atqa)addLog(`[A] ATQA: ${m.atqa}`,C.c2);
+if(m.sak)addLog(`[A] SAK: ${m.sak}`,C.c2);
+if(m.ats)addLog(`[A] ATS: ${m.ats}`,C.c2);
 }
 break;
 case 'APDU_COMMAND':
