@@ -117,15 +117,18 @@ addLog('[B] TAG detectat',C.c3);
 
 if(tag.id){
 addLog(`[B] UID: ${tag.id}`,C.c2);
-}
 
-if(tag.techTypes){
-addLog(`[B] TECH: ${tag.techTypes.join(', ')}`,C.c2);
+const tagInfoMsg={type:'TAG_INFO',uid:tag.id};
+if(rtc.current?.channel?.readyState==='open'){
+rtc.current.send(JSON.stringify(tagInfoMsg));
+addLog('[B] TAG trimis către A prin WebRTC',C.c3);
+}else if(ws.current?.readyState===1){
+ws.current.send(JSON.stringify(tagInfoMsg));
+addLog('[B] TAG trimis către A prin WebSocket',C.c2);
+}else{
+addLog('[B] Nu pot trimite TAG către A: conexiune lipsă',C.c4);
 }
-
-try{
-addLog(`[B] TAG JSON: ${JSON.stringify(tag).slice(0,200)}`,C.c2);
-}catch(e){}
+}
 
 isoDepRef.current=tag;
 readerRelay.current=true;
@@ -317,6 +320,11 @@ rtc.current=new WebRTCClient(
         }
       }
 
+      if(m.type==='TAG_INFO'){
+        addLog(`[A] TAG primit de la B`,C.c3);
+        if(m.uid)addLog(`[A] UID: ${m.uid}`,C.c2);
+      }
+
       if(m.type==='APDU_RELAY_RESPONSE'){
         addLog(`[A] Răspuns APDU primit prin WebRTC: ${(m.apdu||'').slice(0,40)}`,C.c3);
         const p=pending.current[m.requestId];
@@ -376,6 +384,10 @@ case 'CONNECTED':setMyId(m.clientId);myIdRef.current=m.clientId;break;
 case 'SERVER_STATE':case 'CLIENTS_LIST':
 const f=(m.clients||[]).filter(c=>c.id!==myIdRef.current);
 setClients(f);clientsRef.current=f;
+break;
+case 'TAG_INFO':
+addLog(`[A] TAG primit de la B`,C.c3);
+if(m.uid)addLog(`[A] UID: ${m.uid}`,C.c2);
 break;
 case 'APDU_COMMAND':
 addLog(`[B] APDU primit prin WebSocket: ${(m.apdu||'').slice(0,40)}`,C.c2);
