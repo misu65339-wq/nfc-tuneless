@@ -321,8 +321,10 @@ rtc.current=new WebRTCClient(
       }
 
       if(m.type==='NFC_TAG_READ'){
-        addLog(`[A] TAG primit de la B`,C.c3);
-        if(m.uid)addLog(`[A] UID: ${m.uid}`,C.c2);
+        if(modeRef.current==='A'){
+          addLog(`[A] TAG primit de la B`,C.c3);
+          if(m.uid)addLog(`[A] UID: ${m.uid}`,C.c2);
+        }
       }
 
       if(m.type==='APDU_RELAY_RESPONSE'){
@@ -386,8 +388,10 @@ const f=(m.clients||[]).filter(c=>c.id!==myIdRef.current);
 setClients(f);clientsRef.current=f;
 break;
 case 'NFC_TAG_READ':
+if(modeRef.current==='A'){
 addLog(`[A] TAG primit de la B`,C.c3);
 if(m.uid)addLog(`[A] UID: ${m.uid}`,C.c2);
+}
 break;
 case 'APDU_COMMAND':
 addLog(`[B] APDU primit prin WebSocket: ${(m.apdu||'').slice(0,40)}`,C.c2);
