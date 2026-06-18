@@ -27,6 +27,7 @@ class HceModule(private val reactContext: ReactApplicationContext) :
         if (active) { acquireWakeLock(); showNotification() }
         else { releaseWakeLock(); hideNotification() }
         HceRelayService.onApduReceived = if (active) { requestId, apduHex ->
+            Log.d("HceModule", "EVENT -> onApduCommand: $apduHex")
             sendEvent("onApduCommand", Arguments.createMap().apply {
                 putString("requestId", requestId)
                 putString("apdu", apduHex)
