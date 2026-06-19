@@ -6,6 +6,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.ComponentName
+import android.nfc.NfcAdapter
+import android.nfc.cardemulation.CardEmulation
 import android.os.Build
 import android.os.PowerManager
 import android.util.Log
@@ -24,8 +27,8 @@ class HceModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun setActive(active: Boolean) {
         HceRelayService.isActive = active
-        if (active) { acquireWakeLock(); showNotification() }
-        else { releaseWakeLock(); hideNotification() }
+        if (active) { acquireWakeLock(); showNotification(); setPreferredHceService() }
+        else { unsetPreferredHceService(); releaseWakeLock(); hideNotification() }
         HceRelayService.onApduReceived = if (active) { requestId, apduHex ->
             Log.d("HceModule", "EVENT -> onApduCommand: $apduHex")
             sendEvent("onApduCommand", Arguments.createMap().apply {
@@ -51,6 +54,32 @@ class HceModule(private val reactContext: ReactApplicationContext) :
     fun stopForegroundService() {
         try { NfcForegroundService.stop(reactContext) }
         catch (e: Exception) {}
+    }
+
+
+    private fun setPreferredHceService() {
+        try {
+            val activity = currentActivity ?: return
+            val adapter = NfcAdapter.getDefaultAdapter(activity) ?: return
+            val ce = CardEmulation.getInstance(adapter)
+            val component = ComponentName("com.nfctuneless.app", "com.nfctuneless.HceRelayService")
+            ce.setPreferredService(activity, component)
+            Log.d("HceModule", "Preferred HCE service set")
+        } catch (e: Exception) {
+            Log.e("HceModule", "setPreferredHceService: ${e.message}")
+        }
+    }
+
+    private fun unsetPreferredHceService() {
+        try {
+            val activity = currentActivity ?: return
+            val adapter = NfcAdapter.getDefaultAdapter(activity) ?: return
+            val ce = CardEmulation.getInstance(adapter)
+            ce.unsetPreferredService(activity)
+            Log.d("HceModule", "Preferred HCE service unset")
+        } catch (e: Exception) {
+            Log.e("HceModule", "unsetPreferredHceService: ${e.message}")
+        }
     }
 
     private fun showNotification() {

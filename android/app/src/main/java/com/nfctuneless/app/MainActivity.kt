@@ -53,8 +53,7 @@ class MainActivity : ReactActivity() {
     override fun onResume() {
         super.onResume()
         try {
-            // setPreferredService - preia NFC inaintea Google Pay
-            cardEmulation?.setPreferredService(this, hceComponent)
+            // HCE este activat din App.js doar pe modul A
             // enableForegroundDispatch - preia toate evenimentele NFC
             nfcAdapter?.enableForegroundDispatch(this, pendingIntent, null, null)
         } catch (e: Exception) {}
@@ -63,7 +62,6 @@ class MainActivity : ReactActivity() {
     override fun onPause() {
         super.onPause()
         try {
-            cardEmulation?.unsetPreferredService(this)
             nfcAdapter?.disableForegroundDispatch(this)
         } catch (e: Exception) {}
     }
