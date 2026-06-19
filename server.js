@@ -92,7 +92,7 @@ wss.on('connection', (ws) => {
         }
         const timer = setTimeout(() => {
           ws.send(JSON.stringify({ type: 'APDU_RELAY_ERROR', requestId: msg.requestId, error: 'TIMEOUT' }));
-        }, 5000);
+        }, 2500);
         target.ws._pending = { requesterWs: ws, timer };
         target.ws.send(JSON.stringify({
           type: 'APDU_COMMAND', apdu: msg.apdu,
