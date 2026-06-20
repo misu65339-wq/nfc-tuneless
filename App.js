@@ -6,7 +6,7 @@ import{SafeAreaView}from'react-native-safe-area-context';
 import NfcManager,{NfcTech}from'react-native-nfc-manager';
 
 const C={bg0:'#03060A',bg1:'#080F18',bg2:'#0D1A2A',b1:'#1A2E45',b2:'#1F3A55',c1:'#00D4FF',c2:'#FF6600',c3:'#39FF14',c4:'#FF2D78',c5:'#A855F7',t1:'#E2EEF9',t2:'#7FA8CC',t3:'#3D6080'};
-const SERVER_URL='wss://nfctuneless.serveousercontent.com';
+const SERVER_URL='ws://84.252.120.21:8080';
 
 function bH(b=[]){return Array.from(b).map(x=>(x&0xFF).toString(16).toUpperCase().padStart(2,'0')).join('')}
 function hB(h=''){const c=h.replace(/\s/g,'');return Array.from({length:c.length/2},(_,i)=>parseInt(c.substring(i*2,i*2+2),16))}
