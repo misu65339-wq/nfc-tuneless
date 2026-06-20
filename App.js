@@ -244,7 +244,7 @@ try{HceModule.deliverResponse(requestId,'6F00');}catch(e){}
 delete pending.current[requestId];
 setStats(p=>({...p,fail:p.fail+1}));
 addLog('TIMEOUT!',C.c4);
-},2500)
+},500)
 };
 const relayMsg={type:'APDU_RELAY_REQUEST',targetClientId:target.id,apdu,requestId};
 if(rtc.current?.channel?.readyState==='open'){
