@@ -32,6 +32,7 @@ const isoDepRef=useRef(null);
 const readerRelay=useRef(false);
 const hceEmitterRef=useRef(null);
 const keepAliveRef=useRef(null);
+const apduBusyRef=useRef(false);
 const autoRestartRef=useRef(true);
 const clientsRef=useRef([]);
 const myIdRef=useRef(null);
@@ -154,6 +155,7 @@ clearInterval(keepAliveRef.current);
 keepAliveRef.current=null;
 return;
 }
+if(apduBusyRef.current)return;
 try{
 await NfcManager.isoDepHandler.transceive(hB('0084000004'));
 }catch(e){
@@ -309,6 +311,7 @@ rtc.current=new WebRTCClient(
         addLog('[B] APDU primit de la A',C.c2);
         if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
           try{
+            apduBusyRef.current=true;
             const resp=await NfcManager.isoDepHandler.transceive(hB(m.apdu||''));
             const respHex=bH(resp);
 
@@ -323,6 +326,8 @@ rtc.current=new WebRTCClient(
             addLog(`Card RTC ERR: ${e.message}`,C.c4);
             await disconnectCard();
             if(autoRestartRef.current)setTimeout(()=>connectCard(),500);
+          }finally{
+            apduBusyRef.current=false;
           }
         }
       }
@@ -413,6 +418,7 @@ addLog('[B] APDU primit WebSocket',C.c2);
 if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
 (async()=>{
 try{
+apduBusyRef.current=true;
 const resp=await NfcManager.isoDepHandler.transceive(hB(m.apdu||''));
 const respHex=bH(resp);
 ws.current?.send(JSON.stringify({type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex}));
@@ -423,6 +429,8 @@ addLog(`Card ERR: ${e.message}`,C.c4);
 await disconnectCard();
 addLog('Reconectare card...',C.c4);
 if(autoRestartRef.current)setTimeout(()=>connectCard(),500);
+}finally{
+apduBusyRef.current=false;
 }
 })();
 }
