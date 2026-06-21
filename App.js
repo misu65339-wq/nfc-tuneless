@@ -225,14 +225,14 @@ HceModule.setActive(true);
 const emitter=new NativeEventEmitter(HceModule);
 const sub=emitter.addListener('onApduCommand',(event)=>{
 const{requestId,apdu}=event;
-addLog(`[A] POS→ APDU ${apdu.slice(0,40)}`,C.c2);
+addLog('[A] POS→ APDU',C.c2);
 setStats(p=>({...p,total:p.total+1}));
 const target=clientsRef.current.find(c=>c.id!==myIdRef.current);
 if(ws.current?.readyState===1&&target){
 pending.current[requestId]={
 resolve:(resp)=>{
 try{HceModule.deliverResponse(requestId,resp);}catch(e){}
-addLog(`[A] Răspuns primit de la B: ${resp.slice(0,40)}`,C.c3);
+addLog('[A] Răspuns primit de la B',C.c3);
 setStats(p=>({...p,ok:p.ok+1}));
 },
 reject:()=>{
@@ -249,10 +249,10 @@ addLog('TIMEOUT!',C.c4);
 const relayMsg={type:'APDU_RELAY_REQUEST',targetClientId:target.id,apdu,requestId};
 if(rtc.current?.channel?.readyState==='open'){
 rtc.current.send(JSON.stringify(relayMsg));
-addLog('[A] APDU trimis către B prin WebRTC',C.c3);
+addLog('[A] APDU→B WebRTC',C.c3);
 }else{
 ws.current.send(JSON.stringify(relayMsg));
-addLog('[A] APDU trimis către B prin WebSocket fallback',C.c2);
+addLog('[A] APDU→B WebSocket',C.c2);
 }
 }else{
 try{HceModule.deliverResponse(requestId,'6F00');}catch(e){}
@@ -305,22 +305,17 @@ rtc.current=new WebRTCClient(
   async data=>{
     try{
       const m=JSON.parse(data);
-      addLog(`[${modeRef.current}] WebRTC primit: ${(m.type||'date')}`,C.c3);
-
       if(m.type==='APDU_RELAY_REQUEST'){
-        addLog(`[B] APDU primit de la A: ${(m.apdu||'').slice(0,40)}`,C.c2);
+        addLog('[B] APDU primit de la A',C.c2);
         if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
           try{
-            addLog(`[B] APDU -> TAG: ${(m.apdu||'').slice(0,80)}`,C.c2);
-
             const resp=await NfcManager.isoDepHandler.transceive(hB(m.apdu||''));
             const respHex=bH(resp);
 
-            addLog(`[B] TAG -> APDU: ${respHex.slice(0,80)}`,C.c3);
             const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex};
             if(rtc.current?.channel?.readyState==='open')rtc.current.send(JSON.stringify(response));
             else ws.current?.send(JSON.stringify(response));
-            addLog(`[B] Card răspunde către A: ${respHex.slice(0,40)}`,C.c3);
+            addLog('[B] TAG răspuns→A',C.c3);
           }catch(e){
             const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:'6F00'};
             if(rtc.current?.channel?.readyState==='open')rtc.current.send(JSON.stringify(response));
@@ -344,7 +339,7 @@ if(m.ats)addLog(`[A] ATS: ${m.ats}`,C.c2);
       }
 
       if(m.type==='APDU_RELAY_RESPONSE'){
-        addLog(`[A] Răspuns APDU primit prin WebRTC: ${(m.apdu||'').slice(0,40)}`,C.c3);
+        addLog('[A] Răspuns APDU WebRTC',C.c3);
         const p=pending.current[m.requestId];
         if(p){clearTimeout(p.timer);p.resolve(m.apdu);delete pending.current[m.requestId];}
       }
@@ -414,14 +409,14 @@ if(m.ats)addLog(`[A] ATS: ${m.ats}`,C.c2);
 }
 break;
 case 'APDU_COMMAND':
-addLog(`[B] APDU primit prin WebSocket: ${(m.apdu||'').slice(0,40)}`,C.c2);
+addLog('[B] APDU primit WebSocket',C.c2);
 if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
 (async()=>{
 try{
 const resp=await NfcManager.isoDepHandler.transceive(hB(m.apdu||''));
 const respHex=bH(resp);
 ws.current?.send(JSON.stringify({type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex}));
-addLog(`[B] Card răspunde prin WebSocket: ${respHex.slice(0,40)}`,C.c3);
+addLog('[B] TAG răspuns→A WebSocket',C.c3);
 }catch(e){
 ws.current?.send(JSON.stringify({type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:'6F00'}));
 addLog(`Card ERR: ${e.message}`,C.c4);
