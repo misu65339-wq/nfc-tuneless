@@ -309,7 +309,7 @@ rtc.current=new WebRTCClient(
     try{
       const m=JSON.parse(data);
       if(m.type==='APDU_RELAY_REQUEST'){
-        const apduReqKey=m.requestId||m.apdu;
+        const apduReqKey=m.requestId;
         if(apduReqKey&&processedApduRef.current[apduReqKey]){
           addLog('[B] APDU duplicat ignorat',C.c2);
         }else{
@@ -424,7 +424,7 @@ if(m.ats)addLog(`[A] ATS: ${m.ats}`,C.c2);
 }
 break;
 case 'APDU_COMMAND':
-var apduReqKey=m.requestId||m.apdu;
+var apduReqKey=m.requestId;
 if(apduReqKey&&processedApduRef.current[apduReqKey]){
 addLog('[B] APDU duplicat ignorat',C.c2);
 break;

@@ -93,7 +93,8 @@ wss.on('connection', (ws) => {
         const timer = setTimeout(() => {
           ws.send(JSON.stringify({ type: 'APDU_RELAY_ERROR', requestId: msg.requestId, error: 'TIMEOUT' }));
         }, 1000);
-        target.ws._pending = { requesterWs: ws, timer };
+        if (!target.ws._pending) target.ws._pending = {};
+        target.ws._pending[msg.requestId] = { requesterWs: ws, timer };
         target.ws.send(JSON.stringify({
           type: 'APDU_COMMAND', apdu: msg.apdu,
           requestId: msg.requestId, fromClientId: id
@@ -103,15 +104,16 @@ wss.on('connection', (ws) => {
 
       case 'APDU_RELAY_RESPONSE': {
         clients.forEach(({ ws: cws }) => {
-          if (cws._pending) {
-            clearTimeout(cws._pending.timer);
-            cws._pending.requesterWs.send(JSON.stringify({
+          const pending = cws._pending && cws._pending[msg.requestId];
+          if (pending) {
+            clearTimeout(pending.timer);
+            pending.requesterWs.send(JSON.stringify({
               type: 'APDU_RELAY_RESPONSE',
               requestId: msg.requestId,
               apdu: msg.apdu,
               fromClientId: id
             }));
-            delete cws._pending;
+            delete cws._pending[msg.requestId];
           }
         });
         break;
