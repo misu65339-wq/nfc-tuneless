@@ -46,7 +46,9 @@ export default class WebRTCClient {
 
     this.pc.onicecandidate = event => {
       if (event.candidate) {
-        this.onStatus("TRIMIT ICE");
+        const c = event.candidate.candidate || "";
+        const type = c.includes(" typ relay ") ? "relay/TURN" : c.includes(" typ srflx ") ? "srflx/STUN" : c.includes(" typ host ") ? "host/direct" : "unknown";
+        this.onStatus("ICE CANDIDATE: " + type);
         this.sendSignal({
           type: "ice",
           candidate: event.candidate
