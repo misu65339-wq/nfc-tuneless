@@ -53,8 +53,9 @@ class HceRelayService : HostApduService() {
         if (apdu == null || apdu.isEmpty()) return SW_ERR
 
         return try {
+            val nativeStartMs = System.currentTimeMillis()
             val apduHex = apdu.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
-            Log.d(TAG, "APDU: $apduHex active=$isActive")
+            Log.d(TAG, "APDU: $apduHex active=$isActive nativeStart=$nativeStartMs")
 
             if (!isActive) return processLocally(apduHex)
             val cb = onApduReceived ?: return processLocally(apduHex)
@@ -64,7 +65,7 @@ class HceRelayService : HostApduService() {
                 pendingResponse = null
                 val requestId = System.currentTimeMillis().toString()
                 pendingRequestId = requestId
-                try { cb.invoke(requestId, apduHex) }
+                try { cb.invoke(requestId, apduHex, nativeStartMs) }
                 catch (e: Exception) { pendingRequestId = null; return processLocally(apduHex) }
 
                 val deadline = System.currentTimeMillis() + 3000
@@ -74,6 +75,7 @@ class HceRelayService : HostApduService() {
                     responseCondition.await(remaining, java.util.concurrent.TimeUnit.MILLISECONDS)
                 }
                 val result = pendingResponse ?: processLocally(apduHex)
+                Log.d(TAG, "APDU done requestId=$requestId nativeTotal=${System.currentTimeMillis() - nativeStartMs}ms")
                 pendingRequestId = null
                 result
             } finally {

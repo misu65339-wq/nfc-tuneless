@@ -227,8 +227,9 @@ try{
 HceModule.setActive(true);
 const emitter=new NativeEventEmitter(HceModule);
 const sub=emitter.addListener('onApduCommand',(event)=>{
-const{requestId,apdu}=event;
-addLog(`[A] POS→ APDU id=${String(requestId).slice(-4)} apdu=${apdu.slice(0,12)}`,C.c2);
+const{requestId,apdu,nativeStartMs}=event;
+const hceToJs=nativeStartMs?Date.now()-nativeStartMs:0;
+addLog(`[A] POS→ APDU id=${String(requestId).slice(-4)} hceJs=${hceToJs}ms apdu=${apdu.slice(0,12)}`,C.c2);
 setStats(p=>({...p,total:p.total+1}));
 const target=clientsRef.current.find(c=>c.id!==myIdRef.current);
 if(ws.current?.readyState===1&&target){

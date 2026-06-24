@@ -29,11 +29,12 @@ class HceModule(private val reactContext: ReactApplicationContext) :
         HceRelayService.isActive = active
         if (active) { acquireWakeLock(); showNotification(); setPreferredHceService() }
         else { unsetPreferredHceService(); releaseWakeLock(); hideNotification() }
-        HceRelayService.onApduReceived = if (active) { requestId, apduHex ->
+        HceRelayService.onApduReceived = if (active) { requestId, apduHex, nativeStartMs ->
             Log.d("HceModule", "EVENT -> onApduCommand: $apduHex")
             sendEvent("onApduCommand", Arguments.createMap().apply {
                 putString("requestId", requestId)
                 putString("apdu", apduHex)
+                putDouble("nativeStartMs", nativeStartMs.toDouble())
             })
         } else null
         Log.d("HceModule", "setActive: $active")
