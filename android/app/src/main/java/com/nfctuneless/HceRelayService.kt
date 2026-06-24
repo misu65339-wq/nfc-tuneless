@@ -19,10 +19,15 @@ class HceRelayService : HostApduService() {
         val responseLock = java.util.concurrent.locks.ReentrantLock()
         val responseCondition = responseLock.newCondition()
         @Volatile var pendingResponse: ByteArray? = null
+        @Volatile var pendingRequestId: String? = null
 
-        fun deliverResponse(apduHex: String) {
+        fun deliverResponse(requestId: String, apduHex: String) {
             responseLock.lock()
             try {
+                if (pendingRequestId != requestId) {
+                    Log.w(TAG, "Ignoring response for old requestId=$requestId current=$pendingRequestId")
+                    return
+                }
                 pendingResponse = try {
                     val clean = apduHex.trim().replace(" ", "")
                     if (clean.isEmpty() || clean.length % 2 != 0) SW_ERR
@@ -57,8 +62,10 @@ class HceRelayService : HostApduService() {
             responseLock.lock()
             try {
                 pendingResponse = null
-                try { cb.invoke(System.currentTimeMillis().toString(), apduHex) }
-                catch (e: Exception) { return processLocally(apduHex) }
+                val requestId = System.currentTimeMillis().toString()
+                pendingRequestId = requestId
+                try { cb.invoke(requestId, apduHex) }
+                catch (e: Exception) { pendingRequestId = null; return processLocally(apduHex) }
 
                 val deadline = System.currentTimeMillis() + 3000
                 while (pendingResponse == null) {
@@ -66,7 +73,9 @@ class HceRelayService : HostApduService() {
                     if (remaining <= 0) break
                     responseCondition.await(remaining, java.util.concurrent.TimeUnit.MILLISECONDS)
                 }
-                pendingResponse ?: processLocally(apduHex)
+                val result = pendingResponse ?: processLocally(apduHex)
+                pendingRequestId = null
+                result
             } finally {
                 responseLock.unlock()
             }
@@ -94,7 +103,7 @@ class HceRelayService : HostApduService() {
     override fun onDeactivated(reason: Int) {
         try {
             responseLock.lock()
-            try { pendingResponse = SW_ERR; responseCondition.signalAll() }
+            try { pendingResponse = SW_ERR; pendingRequestId = null; responseCondition.signalAll() }
             finally { responseLock.unlock() }
         } catch (e: Exception) {}
     }

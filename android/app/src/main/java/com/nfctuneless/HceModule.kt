@@ -41,7 +41,7 @@ class HceModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun deliverResponse(requestId: String, apduHex: String) {
-        HceRelayService.deliverResponse(apduHex)
+        HceRelayService.deliverResponse(requestId, apduHex)
     }
 
     @ReactMethod
