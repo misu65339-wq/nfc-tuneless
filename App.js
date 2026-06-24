@@ -252,7 +252,7 @@ addLog('TIMEOUT!',C.c4);
 };
 const relayMsg={type:'APDU_RELAY_REQUEST',targetClientId:target.id,apdu,requestId};
 if(rtc.current?.channel?.readyState==='open'){
-rtc.current.send(JSON.stringify(relayMsg));
+rtc.current.send(`Q|${requestId}|${apdu}`);
 addLog('[A] APDU→B WebRTC',C.c3);
 }else{
 ws.current.send(JSON.stringify(relayMsg));
@@ -308,7 +308,16 @@ rtc.current=new WebRTCClient(
   msg=>ws.current?.send(JSON.stringify(msg)),
   async data=>{
     try{
-      const m=JSON.parse(data);
+      let m;
+      if(typeof data==='string'&&data.startsWith('Q|')){
+        const parts=data.split('|');
+        m={type:'APDU_RELAY_REQUEST',requestId:parts[1],apdu:parts.slice(2).join('|')};
+      }else if(typeof data==='string'&&data.startsWith('S|')){
+        const parts=data.split('|');
+        m={type:'APDU_RELAY_RESPONSE',requestId:parts[1],apdu:parts.slice(2).join('|')};
+      }else{
+        m=JSON.parse(data);
+      }
       if(m.type==='APDU_RELAY_REQUEST'){
         const apduReqKey=m.requestId;
         if(apduReqKey&&processedApduRef.current[apduReqKey]){
@@ -327,12 +336,12 @@ rtc.current=new WebRTCClient(
             const respHex=bH(resp);
 
             const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex};
-            if(rtc.current?.channel?.readyState==='open')rtc.current.send(JSON.stringify(response));
+            if(rtc.current?.channel?.readyState==='open')rtc.current.send(`S|${m.requestId}|${respHex}`);
             else ws.current?.send(JSON.stringify(response));
             addLog(`[B] TAG răspuns→A id=${String(m.requestId).slice(-4)} tag=${Date.now()-bStart}ms`,C.c3);
           }catch(e){
             const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:'6F00'};
-            if(rtc.current?.channel?.readyState==='open')rtc.current.send(JSON.stringify(response));
+            if(rtc.current?.channel?.readyState==='open')rtc.current.send(`S|${m.requestId}|6F00`);
             else ws.current?.send(JSON.stringify(response));
             addLog(`Card RTC ERR: ${e.message}`,C.c4);
             await disconnectCard();
