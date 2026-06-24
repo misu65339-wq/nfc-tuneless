@@ -14,7 +14,7 @@ class HceRelayService : HostApduService() {
 
         @Volatile var isActive = false
         @Volatile var appContext: Context? = null
-        var onApduReceived: ((String, String) -> Unit)? = null
+        var onApduReceived: ((String, String, Long) -> Unit)? = null
 
         val responseLock = java.util.concurrent.locks.ReentrantLock()
         val responseCondition = responseLock.newCondition()
