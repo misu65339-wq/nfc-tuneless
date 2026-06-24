@@ -228,14 +228,14 @@ HceModule.setActive(true);
 const emitter=new NativeEventEmitter(HceModule);
 const sub=emitter.addListener('onApduCommand',(event)=>{
 const{requestId,apdu}=event;
-addLog('[A] POS→ APDU',C.c2);
+addLog(`[A] POS→ APDU id=${String(requestId).slice(-4)} apdu=${apdu.slice(0,12)}`,C.c2);
 setStats(p=>({...p,total:p.total+1}));
 const target=clientsRef.current.find(c=>c.id!==myIdRef.current);
 if(ws.current?.readyState===1&&target){
 pending.current[requestId]={
 resolve:(resp)=>{
 try{HceModule.deliverResponse(requestId,resp);}catch(e){}
-addLog('[A] Răspuns primit de la B',C.c3);
+addLog(`[A] Răspuns B id=${String(requestId).slice(-4)}`,C.c3);
 setStats(p=>({...p,ok:p.ok+1}));
 },
 reject:()=>{
@@ -317,7 +317,7 @@ rtc.current=new WebRTCClient(
           processedApduRef.current[apduReqKey]=true;
           setTimeout(()=>{delete processedApduRef.current[apduReqKey];},5000);
         }
-        addLog('[B] APDU primit de la A',C.c2);
+        addLog(`[B] APDU primit id=${String(m.requestId).slice(-4)} apdu=${(m.apdu||'').slice(0,12)}`,C.c2);
         if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
           try{
             apduBusyRef.current=true;
@@ -433,7 +433,7 @@ if(apduReqKey){
 processedApduRef.current[apduReqKey]=true;
 setTimeout(()=>{delete processedApduRef.current[apduReqKey];},5000);
 }
-addLog('[B] APDU primit WebSocket',C.c2);
+addLog(`[B] APDU WS id=${String(m.requestId).slice(-4)} apdu=${(m.apdu||'').slice(0,12)}`,C.c2);
 if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
 (async()=>{
 try{
