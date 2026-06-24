@@ -78,7 +78,7 @@ export default class WebRTCClient {
   }
 
   async createOffer() {
-    this.channel = this.pc.createDataChannel("data");
+    this.channel = this.pc.createDataChannel("data",{ordered:false,maxRetransmits:0});
     this.setupChannel();
 
     const offer = await this.pc.createOffer();
