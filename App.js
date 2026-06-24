@@ -232,10 +232,10 @@ addLog(`[A] POS→ APDU id=${String(requestId).slice(-4)} apdu=${apdu.slice(0,12
 setStats(p=>({...p,total:p.total+1}));
 const target=clientsRef.current.find(c=>c.id!==myIdRef.current);
 if(ws.current?.readyState===1&&target){
-pending.current[requestId]={
+pending.current[requestId]={start:Date.now(),
 resolve:(resp)=>{
 try{HceModule.deliverResponse(requestId,resp);}catch(e){}
-addLog(`[A] Răspuns B id=${String(requestId).slice(-4)}`,C.c3);
+addLog(`[A] Răspuns B id=${String(requestId).slice(-4)} total=${Date.now()-(pending.current[requestId]?.start||Date.now())}ms`,C.c3);
 setStats(p=>({...p,ok:p.ok+1}));
 },
 reject:()=>{
@@ -317,6 +317,7 @@ rtc.current=new WebRTCClient(
           processedApduRef.current[apduReqKey]=true;
           setTimeout(()=>{delete processedApduRef.current[apduReqKey];},5000);
         }
+        const bStart=Date.now();
         addLog(`[B] APDU primit id=${String(m.requestId).slice(-4)} apdu=${(m.apdu||'').slice(0,12)}`,C.c2);
         if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
           try{
@@ -327,7 +328,7 @@ rtc.current=new WebRTCClient(
             const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex};
             if(rtc.current?.channel?.readyState==='open')rtc.current.send(JSON.stringify(response));
             else ws.current?.send(JSON.stringify(response));
-            addLog('[B] TAG răspuns→A',C.c3);
+            addLog(`[B] TAG răspuns→A id=${String(m.requestId).slice(-4)} tag=${Date.now()-bStart}ms`,C.c3);
           }catch(e){
             const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:'6F00'};
             if(rtc.current?.channel?.readyState==='open')rtc.current.send(JSON.stringify(response));
@@ -433,6 +434,7 @@ if(apduReqKey){
 processedApduRef.current[apduReqKey]=true;
 setTimeout(()=>{delete processedApduRef.current[apduReqKey];},5000);
 }
+const bStart=Date.now();
 addLog(`[B] APDU WS id=${String(m.requestId).slice(-4)} apdu=${(m.apdu||'').slice(0,12)}`,C.c2);
 if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
 (async()=>{
@@ -441,7 +443,7 @@ apduBusyRef.current=true;
 const resp=await NfcManager.isoDepHandler.transceive(hB(m.apdu||''));
 const respHex=bH(resp);
 ws.current?.send(JSON.stringify({type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex}));
-addLog('[B] TAG răspuns→A WebSocket',C.c3);
+addLog(`[B] TAG răspuns→A WS id=${String(m.requestId).slice(-4)} tag=${Date.now()-bStart}ms`,C.c3);
 }catch(e){
 ws.current?.send(JSON.stringify({type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:'6F00'}));
 addLog(`Card ERR: ${e.message}`,C.c4);
