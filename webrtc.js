@@ -168,5 +168,5 @@ export default class WebRTCClient {
       this.channel.send(data);
     }
   }
-}0
+}
 
