@@ -38,6 +38,9 @@ export default class WebRTCClient {
 
     this.pc.onconnectionstatechange = () => {
       this.onStatus("PC STATE: " + this.pc.connectionState);
+      if (this.pc.connectionState === "connected") {
+        setTimeout(() => this.logSelectedCandidatePair(), 1000);
+      }
     };
 
     this.pc.onsignalingstatechange = () => {
@@ -124,6 +127,36 @@ export default class WebRTCClient {
       );
     } catch (e) {
       console.log(e);
+    }
+  }
+
+  async logSelectedCandidatePair() {
+    try {
+      const stats = await this.pc.getStats();
+      const byId = {};
+      stats.forEach ? stats.forEach(v => { byId[v.id] = v; }) : Object.values(stats).forEach(v => { byId[v.id] = v; });
+
+      let pair = null;
+      stats.forEach ? stats.forEach(v => {
+        if (v.type === "candidate-pair" && (v.selected || v.nominated || v.state === "succeeded")) pair = v;
+      }) : Object.values(stats).forEach(v => {
+        if (v.type === "candidate-pair" && (v.selected || v.nominated || v.state === "succeeded")) pair = v;
+      });
+
+      if (!pair) {
+        this.onStatus("WEBRTC ROUTE: unknown");
+        return;
+      }
+
+      const local = byId[pair.localCandidateId];
+      const remote = byId[pair.remoteCandidateId];
+
+      const localType = local?.candidateType || "unknown";
+      const remoteType = remote?.candidateType || "unknown";
+
+      this.onStatus("WEBRTC ROUTE: local=" + localType + " remote=" + remoteType);
+    } catch (e) {
+      this.onStatus("WEBRTC ROUTE ERR: " + (e.message || "stats"));
     }
   }
 
