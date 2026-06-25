@@ -32,26 +32,12 @@ export default class WebRTCClient {
       ]
     });
 
-    this.pc.oniceconnectionstatechange = () => {
-      this.onStatus("ICE STATE: " + this.pc.iceConnectionState);
-    };
-
-    this.pc.onconnectionstatechange = () => {
-      this.onStatus("PC STATE: " + this.pc.connectionState);
-      if (this.pc.connectionState === "connected") {
-        setTimeout(() => this.logSelectedCandidatePair(), 1000);
-      }
-    };
-
-    this.pc.onsignalingstatechange = () => {
-      this.onStatus("SIGNAL STATE: " + this.pc.signalingState);
-    };
+    this.pc.oniceconnectionstatechange = () => {};
+    this.pc.onconnectionstatechange = () => {};
+    this.pc.onsignalingstatechange = () => {};
 
     this.pc.onicecandidate = event => {
       if (event.candidate) {
-        const c = event.candidate.candidate || "";
-        const type = c.includes(" typ relay ") ? "relay/TURN" : c.includes(" typ srflx ") ? "srflx/STUN" : c.includes(" typ host ") ? "host/direct" : "unknown";
-        this.onStatus("ICE CANDIDATE: " + type);
         this.sendSignal({
           type: "ice",
           candidate: event.candidate
