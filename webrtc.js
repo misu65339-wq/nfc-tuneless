@@ -136,12 +136,24 @@ export default class WebRTCClient {
       const byId = {};
       stats.forEach ? stats.forEach(v => { byId[v.id] = v; }) : Object.values(stats).forEach(v => { byId[v.id] = v; });
 
+      const items = [];
+      stats.forEach ? stats.forEach(v => items.push(v))
+                    : Object.values(stats).forEach(v => items.push(v));
+
       let pair = null;
-      stats.forEach ? stats.forEach(v => {
-        if (v.type === "candidate-pair" && (v.selected || v.nominated || v.state === "succeeded")) pair = v;
-      }) : Object.values(stats).forEach(v => {
-        if (v.type === "candidate-pair" && (v.selected || v.nominated || v.state === "succeeded")) pair = v;
-      });
+
+      const transport = items.find(v => v.type === "transport" && v.selectedCandidatePairId);
+      if (transport) pair = byId[transport.selectedCandidatePairId];
+
+      if (!pair) {
+        pair = items.find(v => v.type === "candidate-pair" && v.selected === true);
+      }
+
+      if (!pair) {
+        pair = items
+          .filter(v => v.type === "candidate-pair" && (v.nominated || v.state === "succeeded"))
+          .sort((a,b) => ((b.bytesSent||0)+(b.bytesReceived||0)) - ((a.bytesSent||0)+(a.bytesReceived||0)))[0];
+      }
 
       if (!pair) {
         this.onStatus("WEBRTC ROUTE: unknown");
@@ -153,8 +165,10 @@ export default class WebRTCClient {
 
       const localType = local?.candidateType || "unknown";
       const remoteType = remote?.candidateType || "unknown";
+      const localProto = local?.protocol || "unknown";
+      const remoteProto = remote?.protocol || "unknown";
 
-      this.onStatus("WEBRTC ROUTE: local=" + localType + " remote=" + remoteType);
+      this.onStatus("WEBRTC ROUTE: local=" + localType + "/" + localProto + " remote=" + remoteType + "/" + remoteProto);
     } catch (e) {
       this.onStatus("WEBRTC ROUTE ERR: " + (e.message || "stats"));
     }
