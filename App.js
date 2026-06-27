@@ -169,7 +169,7 @@ addLog('Card deconectat! Reconectare...',C.c4);
 await resetNfc();
 if(autoRestartRef.current){
 connectingCard.current=false;
-setTimeout(()=>connectCard(),500);
+setTimeout(()=>connectCard(),100);
 }
 }
 },2000);
@@ -180,7 +180,7 @@ if(e.message!=='cancelled'){
 addLog(`Eroare: ${e.message}`,C.c4);
 if(autoRestartRef.current){
 connectingCard.current=false;
-setTimeout(()=>connectCard(),1000);
+setTimeout(()=>connectCard(),200);
 return;
 }
 }
@@ -345,7 +345,7 @@ rtc.current=new WebRTCClient(
             else ws.current?.send(JSON.stringify(response));
             addLog(`Card RTC ERR: ${e.message}`,C.c4);
             await disconnectCard();
-            if(autoRestartRef.current)setTimeout(()=>connectCard(),500);
+            if(autoRestartRef.current)setTimeout(()=>connectCard(),100);
           }finally{
             apduBusyRef.current=false;
           }
@@ -398,7 +398,7 @@ if(modeRef.current==='A'){
 setTimeout(()=>startHce(),1500);
 setTimeout(()=>{addLog('🚀 Pornesc WebRTC offer',C.c2);rtc.current?.createOffer();},2500);
 }
-else if(modeRef.current==='B')setTimeout(()=>connectCard(),1500);
+else if(modeRef.current==='B')setTimeout(()=>connectCard(),200);
 };
 s.onclose=()=>{
 setSt('disconnected');ws.current=null;
@@ -459,7 +459,7 @@ ws.current?.send(JSON.stringify({type:'APDU_RELAY_RESPONSE',requestId:m.requestI
 addLog(`Card ERR: ${e.message}`,C.c4);
 await disconnectCard();
 addLog('Reconectare card...',C.c4);
-if(autoRestartRef.current)setTimeout(()=>connectCard(),500);
+if(autoRestartRef.current)setTimeout(()=>connectCard(),100);
 }finally{
 apduBusyRef.current=false;
 }
