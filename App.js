@@ -173,7 +173,7 @@ connectingCard.current=false;
 setTimeout(()=>connectCard(),100);
 }
 }
-},2000);
+},500);
 
 }catch(e){
 await disconnectCard();
