@@ -93,12 +93,13 @@ if(keepAliveRef.current)clearInterval(keepAliveRef.current);
 },[]);
 
 // Disconnect card complet
-const disconnectCard=useCallback(async()=>{
+const disconnectCard=useCallback(async(fullReset=false)=>{
 if(keepAliveRef.current){clearInterval(keepAliveRef.current);keepAliveRef.current=null;}
 readerRelay.current=false;
 isoDepRef.current=null;
 setCardOk(false);
-await resetNfc();
+try{await NfcManager.cancelTechnologyRequest();}catch(e){}
+if(fullReset)await resetNfc();
 },[]);
 
 // Connect card fizic (Telefon B)
@@ -108,7 +109,7 @@ connectingCard.current=true;
 
 try{
 // Reset complet inainte de orice
-await disconnectCard();
+await disconnectCard(false);
 addLog('Așteaptă card...',C.t2);
 
 await NfcManager.requestTechnology([NfcTech.IsoDep]);
@@ -166,7 +167,7 @@ readerRelay.current=false;
 isoDepRef.current=null;
 setCardOk(false);
 addLog('Card deconectat! Reconectare...',C.c4);
-await resetNfc();
+try{await NfcManager.cancelTechnologyRequest();}catch(e){}
 if(autoRestartRef.current){
 connectingCard.current=false;
 setTimeout(()=>connectCard(),100);
