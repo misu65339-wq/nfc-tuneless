@@ -216,14 +216,12 @@ connectingHce.current=false;
 return;
 }
 
-// Reset complet HCE
-try{HceModule.setActive(false);}catch(e){}
+// Start HCE fără reset complet inutil
 if(hceEmitterRef.current){
 try{hceEmitterRef.current.remove();}catch(e){}
 hceEmitterRef.current=null;
 }
 
-setTimeout(()=>{
 try{
 HceModule.setActive(true);
 const emitter=new NativeEventEmitter(HceModule);
@@ -396,8 +394,8 @@ const{HceModule}=NativeModules;
 HceModule?.startForegroundService&&HceModule.startForegroundService();
 }
 if(modeRef.current==='A'){
-setTimeout(()=>startHce(),1500);
-setTimeout(()=>{addLog('🚀 Pornesc WebRTC offer',C.c2);rtc.current?.createOffer();},2500);
+setTimeout(()=>startHce(),200);
+setTimeout(()=>{addLog('🚀 Pornesc WebRTC offer',C.c2);rtc.current?.createOffer();},500);
 }
 else if(modeRef.current==='B')setTimeout(()=>connectCard(),200);
 };
