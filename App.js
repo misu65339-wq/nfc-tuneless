@@ -114,6 +114,11 @@ await disconnectCard(false);
 addLog('Așteaptă card...',C.t2);
 
 await NfcManager.requestTechnology([NfcTech.IsoDep]);
+
+try{
+await NfcManager.setTimeout(700);
+}catch(e){}
+
 const tag=await NfcManager.getTag();
 if(!tag)throw new Error('Tag null');
 
