@@ -271,7 +271,6 @@ addLog(`HCE Eroare: ${e.message}`,C.c4);
 connectingHce.current=false;
 if(autoRestartRef.current)setTimeout(()=>startHce(),1000);
 }
-},1500);
 },[addLog]);
 
 const toggleHce=useCallback(()=>{
