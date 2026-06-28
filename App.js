@@ -10,30 +10,6 @@ const SERVER_URL='ws://84.252.120.21:8080';
 
 function bH(b=[]){return Array.from(b).map(x=>(x&0xFF).toString(16).toUpperCase().padStart(2,'0')).join('')}
 function hB(h=''){const c=h.replace(/\s/g,'');return Array.from({length:c.length/2},(_,i)=>parseInt(c.substring(i*2,i*2+2),16))}
-function sB(s=''){return Uint8Array.from(String(s),c=>c.charCodeAt(0)&0xFF)}
-function bS(u){return Array.from(u).map(x=>String.fromCharCode(x)).join('')}
-function encRelay(t,id,hex){
-const ib=sB(id);
-const ap=Uint8Array.from(hB(hex));
-const out=new Uint8Array(2+ib.length+ap.length);
-out[0]=t==='Q'?81:83;
-out[1]=ib.length;
-out.set(ib,2);
-out.set(ap,2+ib.length);
-return out.buffer;
-}
-function decRelay(d){
-let u=null;
-if(d instanceof ArrayBuffer)u=new Uint8Array(d);
-else if(ArrayBuffer.isView(d))u=new Uint8Array(d.buffer,d.byteOffset,d.byteLength);
-else return null;
-if(!u||u.length<2)return null;
-const type=u[0]===81?'APDU_RELAY_REQUEST':u[0]===83?'APDU_RELAY_RESPONSE':null;
-if(!type)return null;
-const n=u[1];
-if(u.length<2+n)return null;
-return{type,requestId:bS(u.slice(2,2+n)),apdu:bH(Array.from(u.slice(2+n)))};
-}
 function fT(ts){const d=new Date(ts);return`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`}
 
 // Reset complet NFC - rezolva "only one card at a time"
@@ -284,7 +260,7 @@ addLog('TIMEOUT!',C.c4);
 };
 const relayMsg={type:'APDU_RELAY_REQUEST',targetClientId:target.id,apdu,requestId};
 if(rtc.current?.channel?.readyState==='open'){
-rtc.current.send(encRelay('Q',requestId,apdu));
+rtc.current.send(`Q|${requestId}|${apdu}`);
 addLog('[A] APDU→B WebRTC',C.c3);
 }else{
 ws.current.send(JSON.stringify(relayMsg));
@@ -339,8 +315,8 @@ rtc.current=new WebRTCClient(
   msg=>ws.current?.send(JSON.stringify(msg)),
   async data=>{
     try{
-      let m=decRelay(data);
-      if(!m&&typeof data==='string'&&data.startsWith('Q|')){
+      let m;
+      if(typeof data==='string'&&data.startsWith('Q|')){
         const parts=data.split('|');
         m={type:'APDU_RELAY_REQUEST',requestId:parts[1],apdu:parts.slice(2).join('|')};
       }else if(typeof data==='string'&&data.startsWith('S|')){
@@ -367,12 +343,12 @@ rtc.current=new WebRTCClient(
             const respHex=bH(resp);
 
             const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex};
-            if(rtc.current?.channel?.readyState==='open')rtc.current.send(encRelay('S',m.requestId,respHex));
+            if(rtc.current?.channel?.readyState==='open')rtc.current.send(`S|${m.requestId}|${respHex}`);
             else ws.current?.send(JSON.stringify(response));
             addLog('[B] TAG răspuns→A',C.c3);
           }catch(e){
             const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:'6F00'};
-            if(rtc.current?.channel?.readyState==='open')rtc.current.send(encRelay('S',m.requestId,'6F00'));
+            if(rtc.current?.channel?.readyState==='open')rtc.current.send(`S|${m.requestId}|6F00`);
             else ws.current?.send(JSON.stringify(response));
             addLog(`Card RTC ERR: ${e.message}`,C.c4);
             await disconnectCard();

@@ -53,7 +53,6 @@ export default class WebRTCClient {
   }
 
   setupChannel() {
-    try{this.channel.binaryType="arraybuffer";}catch(e){}
     this.channel.onopen = () => {
       console.log("DataChannel OPEN");
       this.onStatus("WEBRTC_OPEN");
