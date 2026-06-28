@@ -33,6 +33,7 @@ const readerRelay=useRef(false);
 const hceEmitterRef=useRef(null);
 const keepAliveRef=useRef(null);
 const apduBusyRef=useRef(false);
+const keepAliveBusyRef=useRef(false);
 const processedApduRef=useRef({});
 const autoRestartRef=useRef(true);
 const clientsRef=useRef([]);
@@ -157,7 +158,8 @@ clearInterval(keepAliveRef.current);
 keepAliveRef.current=null;
 return;
 }
-if(apduBusyRef.current)return;
+if(apduBusyRef.current||keepAliveBusyRef.current)return;
+keepAliveBusyRef.current=true;
 try{
 await NfcManager.isoDepHandler.transceive(hB('0084000004'));
 }catch(e){
@@ -172,6 +174,8 @@ if(autoRestartRef.current){
 connectingCard.current=false;
 setTimeout(()=>connectCard(),100);
 }
+}finally{
+keepAliveBusyRef.current=false;
 }
 },500);
 
