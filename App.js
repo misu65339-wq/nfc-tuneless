@@ -111,7 +111,7 @@ connectingCard.current=true;
 try{
 // Reset complet inainte de orice
 await disconnectCard(false);
-addLog('Așteaptă card...',C.t2);
+addLog('Hold card near phone',C.t2);
 
 await NfcManager.requestTechnology([NfcTech.IsoDep]);
 
@@ -122,14 +122,9 @@ await NfcManager.setTimeout(400);
 const tag=await NfcManager.getTag();
 if(!tag)throw new Error('Tag null');
 
-addLog('[B] TAG detectat',C.c3);
+
 
 if(tag.id){
-addLog(`[B] UID: ${tag.id}`,C.c2);
-if(tag.techTypes)addLog(`[B] TECH: ${tag.techTypes.join(', ')}`,C.c2);
-if(tag.atqa||tag.ATQA)addLog(`[B] ATQA: ${tag.atqa||tag.ATQA}`,C.c2);
-if(tag.sak||tag.SAK)addLog(`[B] SAK: ${tag.sak||tag.SAK}`,C.c2);
-if(tag.ats||tag.ATS)addLog(`[B] ATS: ${tag.ats||tag.ATS}`,C.c2);
 
 const tagInfoMsg={
 type:'NFC_TAG_READ',
@@ -142,19 +137,16 @@ tagRaw:tag
 };
 if(rtc.current?.channel?.readyState==='open'){
 rtc.current.send(JSON.stringify(tagInfoMsg));
-addLog('[B] TAG trimis către A prin WebRTC',C.c3);
 }else if(ws.current?.readyState===1){
 ws.current.send(JSON.stringify(tagInfoMsg));
-addLog('[B] TAG trimis către A prin WebSocket',C.c2);
 }else{
-addLog('[B] Nu pot trimite TAG către A: conexiune lipsă',C.c4);
 }
 }
 
 isoDepRef.current=tag;
 readerRelay.current=true;
 setCardOk(true);
-addLog('✅ Card conectat! Relay activ.',C.c3);
+addLog('✅ Card ready',C.c3);
 
 // Keepalive card
 keepAliveRef.current=setInterval(async()=>{
@@ -173,7 +165,7 @@ keepAliveRef.current=null;
 readerRelay.current=false;
 isoDepRef.current=null;
 setCardOk(false);
-addLog('Card deconectat! Reconectare...',C.c4);
+addLog('❌ Card removed',C.c4);
 try{await NfcManager.cancelTechnologyRequest();}catch(e){}
 if(autoRestartRef.current){
 connectingCard.current=false;
@@ -187,7 +179,7 @@ keepAliveBusyRef.current=false;
 }catch(e){
 await disconnectCard();
 if(e.message!=='cancelled'){
-addLog(`Eroare: ${e.message}`,C.c4);
+addLog(`Error: ${e.message}`,C.c4);
 if(autoRestartRef.current){
 connectingCard.current=false;
 setTimeout(()=>connectCard(),200);
@@ -210,7 +202,7 @@ try{HceModule.setActive(false);}catch(e){}
 }
 setHceActive(false);
 connectingHce.current=false;
-addLog('Emulator oprit',C.c2);
+addLog('Emulator stopped',C.c2);
 },[addLog]);
 
 // Start HCE (Telefon A)
@@ -220,7 +212,7 @@ connectingHce.current=true;
 
 const{HceModule}=NativeModules;
 if(!HceModule){
-addLog('HCE indisponibil!',C.c4);
+addLog('HCE unavailable',C.c4);
 connectingHce.current=false;
 return;
 }
@@ -236,15 +228,14 @@ HceModule.setActive(true);
 const emitter=new NativeEventEmitter(HceModule);
 const sub=emitter.addListener('onApduCommand',(event)=>{
 const{requestId,apdu,nativeStartMs}=event;
-const hceToJs=nativeStartMs?Date.now()-nativeStartMs:0;
-addLog('[A] POS→ APDU',C.c2);
+
 setStats(p=>({...p,total:p.total+1}));
 const target=clientsRef.current.find(c=>c.id!==myIdRef.current);
 if(ws.current?.readyState===1&&target){
 pending.current[requestId]={start:Date.now(),
 resolve:(resp)=>{
 try{HceModule.deliverResponse(requestId,resp);}catch(e){}
-addLog('[A] Răspuns B',C.c3);
+addLog('B → A',C.c3);
 setStats(p=>({...p,ok:p.ok+1}));
 },
 reject:()=>{
@@ -261,22 +252,22 @@ addLog('TIMEOUT!',C.c4);
 const relayMsg={type:'APDU_RELAY_REQUEST',targetClientId:target.id,apdu,requestId};
 if(rtc.current?.channel?.readyState==='open'){
 rtc.current.send(`Q|${requestId}|${apdu}`);
-addLog('[A] APDU→B WebRTC',C.c3);
+addLog('A → B',C.c3);
 }else{
 ws.current.send(JSON.stringify(relayMsg));
-addLog('[A] APDU→B WebSocket',C.c2);
+addLog('A → B',C.c2);
 }
 }else{
 try{HceModule.deliverResponse(requestId,'6F00');}catch(e){}
-addLog(target?'Server deconectat!':'Telefon B lipsă!',C.c4);
+addLog(target?'Server disconnected':'Phone B missing',C.c4);
 }
 });
 hceEmitterRef.current=sub;
 setHceActive(true);
 connectingHce.current=false;
-addLog('✅ Emulator pornit! Apropie de POS.',C.c3);
+addLog('✅ Emulator ready',C.c3);
 }catch(e){
-addLog(`HCE Eroare: ${e.message}`,C.c4);
+addLog(`HCE error: ${e.message}`,C.c4);
 connectingHce.current=false;
 if(autoRestartRef.current)setTimeout(()=>startHce(),1000);
 }
@@ -291,7 +282,7 @@ const toggleCard=useCallback(async()=>{
 if(cardOk){
 autoRestartRef.current=false;
 await disconnectCard();
-addLog('Card deconectat manual',C.c2);
+addLog('Card removed',C.c2);
 autoRestartRef.current=true;
 }else{
 await connectCard();
@@ -301,7 +292,7 @@ await connectCard();
 // WebSocket connect
 const connect=useCallback(()=>{
 if(ws.current&&ws.current.readyState===1){
-addLog('WebSocket deja conectat - ignor connect duplicat',C.c2);
+
 return;
 }
 setSt('connecting');
@@ -328,14 +319,13 @@ rtc.current=new WebRTCClient(
       if(m.type==='APDU_RELAY_REQUEST'){
         const apduReqKey=m.requestId;
         if(apduReqKey&&processedApduRef.current[apduReqKey]){
-          addLog('[B] APDU duplicat ignorat',C.c2);
+          
         }else{
         if(apduReqKey){
           processedApduRef.current[apduReqKey]=true;
           setTimeout(()=>{delete processedApduRef.current[apduReqKey];},5000);
         }
-        const bStart=Date.now();
-        addLog('[B] APDU primit',C.c2);
+                addLog('A → B',C.c2);
         if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
           try{
             apduBusyRef.current=true;
@@ -345,12 +335,12 @@ rtc.current=new WebRTCClient(
             const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex};
             if(rtc.current?.channel?.readyState==='open')rtc.current.send(`S|${m.requestId}|${respHex}`);
             else ws.current?.send(JSON.stringify(response));
-            addLog('[B] TAG răspuns→A',C.c3);
+            addLog('B → A',C.c3);
           }catch(e){
             const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:'6F00'};
             if(rtc.current?.channel?.readyState==='open')rtc.current.send(`S|${m.requestId}|6F00`);
             else ws.current?.send(JSON.stringify(response));
-            addLog(`Card RTC ERR: ${e.message}`,C.c4);
+            addLog(`Card error: ${e.message}`,C.c4);
             await disconnectCard();
             if(autoRestartRef.current)setTimeout(()=>connectCard(),100);
           }finally{
@@ -362,17 +352,12 @@ rtc.current=new WebRTCClient(
 
       if(m.type==='NFC_TAG_READ'){
         if(modeRef.current==='A'){
-          addLog(`[A] TAG primit de la B`,C.c3);
-          if(m.uid)addLog(`[A] UID: ${m.uid}`,C.c2);
-if(m.techTypes)addLog(`[A] TECH: ${m.techTypes.join(', ')}`,C.c2);
-if(m.atqa)addLog(`[A] ATQA: ${m.atqa}`,C.c2);
-if(m.sak)addLog(`[A] SAK: ${m.sak}`,C.c2);
-if(m.ats)addLog(`[A] ATS: ${m.ats}`,C.c2);
-        }
+          
+                  }
       }
 
       if(m.type==='APDU_RELAY_RESPONSE'){
-        addLog('[A] Răspuns APDU WebRTC',C.c3);
+        addLog('B → A',C.c3);
         const p=pending.current[m.requestId];
         if(p){clearTimeout(p.timer);p.resolve(m.apdu);delete pending.current[m.requestId];}
       }
@@ -383,33 +368,33 @@ if(m.ats)addLog(`[A] ATS: ${m.ats}`,C.c2);
       }
 
     }catch(err){
-      addLog('WebRTC primit date invalide',C.c4);
+      addLog('WebRTC data error',C.c4);
     }
   },
   status=>{
-    if(status==='WEBRTC_OPEN')addLog('🟢 WebRTC DataChannel deschis',C.c3);
-    else if(status==='WEBRTC_CLOSED')addLog('🔴 WebRTC DataChannel închis',C.c4);
-    else if(status==='WEBRTC_CHANNEL_RECEIVED')addLog('📡 WebRTC canal primit',C.c2);
-    else addLog('WebRTC: '+status,C.c2);
+    if(status==='WEBRTC_OPEN')addLog('🟢 WebRTC connected',C.c3);
+    else if(status==='WEBRTC_CLOSED')addLog('🔴 WebRTC disconnected',C.c4);
+    else if(status==='WEBRTC_CHANNEL_RECEIVED'){}
+    else {}
   }
 );
 const r=modeRef.current==='A'?'emulator':'reader';
 s.send(JSON.stringify({type:'REGISTER',role:r,info:{device:`NFC Tuneless ${modeRef.current}`}}));
 s.send(JSON.stringify({type:'GET_CLIENTS'}));
-addLog('✅ Conectat la server + WebRTC pregătit',C.c3);
+addLog('✅ Server connected',C.c3);
 if(Platform.OS==='android'){
 const{HceModule}=NativeModules;
 HceModule?.startForegroundService&&HceModule.startForegroundService();
 }
 if(modeRef.current==='A'){
 setTimeout(()=>startHce(),200);
-setTimeout(()=>{addLog('🚀 Pornesc WebRTC offer',C.c2);rtc.current?.createOffer();},500);
+setTimeout(()=>{rtc.current?.createOffer();},500);
 }
 else if(modeRef.current==='B')setTimeout(()=>connectCard(),200);
 };
 s.onclose=()=>{
 setSt('disconnected');ws.current=null;
-addLog('Deconectat - reconectare...',C.c4);
+addLog('Server disconnected',C.c4);
 if(autoRestartRef.current)setTimeout(()=>connect(),3000);
 };
 s.onerror=()=>{setSt('disconnected');ws.current=null;};
@@ -433,26 +418,20 @@ setClients(f);clientsRef.current=f;
 break;
 case 'NFC_TAG_READ':
 if(modeRef.current==='A'){
-addLog(`[A] TAG primit de la B`,C.c3);
-if(m.uid)addLog(`[A] UID: ${m.uid}`,C.c2);
-if(m.techTypes)addLog(`[A] TECH: ${m.techTypes.join(', ')}`,C.c2);
-if(m.atqa)addLog(`[A] ATQA: ${m.atqa}`,C.c2);
-if(m.sak)addLog(`[A] SAK: ${m.sak}`,C.c2);
-if(m.ats)addLog(`[A] ATS: ${m.ats}`,C.c2);
+
 }
 break;
 case 'APDU_COMMAND':
 var apduReqKey=m.requestId;
 if(apduReqKey&&processedApduRef.current[apduReqKey]){
-addLog('[B] APDU duplicat ignorat',C.c2);
+
 break;
 }
 if(apduReqKey){
 processedApduRef.current[apduReqKey]=true;
 setTimeout(()=>{delete processedApduRef.current[apduReqKey];},5000);
 }
-const bStart=Date.now();
-addLog('[B] APDU WS',C.c2);
+addLog('A → B',C.c2);
 if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
 (async()=>{
 try{
@@ -460,12 +439,12 @@ apduBusyRef.current=true;
 const resp=await NfcManager.isoDepHandler.transceive(hB(m.apdu||''));
 const respHex=bH(resp);
 ws.current?.send(JSON.stringify({type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex}));
-addLog('[B] TAG răspuns→A WS',C.c3);
+addLog('B → A',C.c3);
 }catch(e){
 ws.current?.send(JSON.stringify({type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:'6F00'}));
-addLog(`Card ERR: ${e.message}`,C.c4);
+addLog(`Card error: ${e.message}`,C.c4);
 await disconnectCard();
-addLog('Reconectare card...',C.c4);
+
 if(autoRestartRef.current)setTimeout(()=>connectCard(),100);
 }finally{
 apduBusyRef.current=false;
