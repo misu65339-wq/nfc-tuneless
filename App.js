@@ -147,6 +147,9 @@ isoDepRef.current=tag;
 readerRelay.current=true;
 setCardOk(true);
 addLog('✅ Card ready',C.c3);
+const cardStatusOn={type:'CARD_STATUS',connected:true};
+if(rtc.current?.channel?.readyState==='open')rtc.current.send(JSON.stringify(cardStatusOn));
+else if(ws.current?.readyState===1)ws.current.send(JSON.stringify(cardStatusOn));
 
 // Keepalive card
 keepAliveRef.current=setInterval(async()=>{
@@ -166,6 +169,9 @@ readerRelay.current=false;
 isoDepRef.current=null;
 setCardOk(false);
 addLog('❌ Card removed',C.c4);
+const cardStatusOff={type:'CARD_STATUS',connected:false};
+if(rtc.current?.channel?.readyState==='open')rtc.current.send(JSON.stringify(cardStatusOff));
+else if(ws.current?.readyState===1)ws.current.send(JSON.stringify(cardStatusOff));
 try{await NfcManager.cancelTechnologyRequest();}catch(e){}
 if(autoRestartRef.current){
 connectingCard.current=false;
@@ -420,6 +426,9 @@ case 'NFC_TAG_READ':
 if(modeRef.current==='A'){
 
 }
+break;
+case 'CARD_STATUS':
+if(modeRef.current==='A')setCardOk(!!m.connected);
 break;
 case 'APDU_COMMAND':
 var apduReqKey=m.requestId;
