@@ -47,6 +47,7 @@ const[myId,setMyId]=useState(null);
 const[clients,setClients]=useState([]);
 const[logs,setLogs]=useState([]);
 const[cardOk,setCardOk]=useState(false);
+const[remoteCardOk,setRemoteCardOk]=useState(false);
 const[hceActive,setHceActive]=useState(false);
 const[nfcOk,setNfcOk]=useState(false);
 const[stats,setStats]=useState({total:0,ok:0,fail:0});
@@ -362,6 +363,13 @@ rtc.current=new WebRTCClient(
                   }
       }
 
+      if(m.type==='CARD_STATUS'){
+        if(modeRef.current==='A'){
+          setRemoteCardOk(!!m.connected);
+          addLog(m.connected?'🟢 Phone B card connected':'🔴 Phone B card disconnected',m.connected?C.c3:C.c4);
+        }
+      }
+
       if(m.type==='APDU_RELAY_RESPONSE'){
         addLog('B → A',C.c3);
         const p=pending.current[m.requestId];
@@ -428,7 +436,10 @@ if(modeRef.current==='A'){
 }
 break;
 case 'CARD_STATUS':
-if(modeRef.current==='A')setCardOk(!!m.connected);
+if(modeRef.current==='A'){
+setRemoteCardOk(!!m.connected);
+addLog(m.connected?'🟢 Phone B card connected':'🔴 Phone B card disconnected',m.connected?C.c3:C.c4);
+}
 break;
 case 'APDU_COMMAND':
 var apduReqKey=m.requestId;
@@ -551,6 +562,11 @@ return(
 <View style={{width:1,height:16,backgroundColor:C.b1,marginHorizontal:12}}/>
 <View style={[s.statusDot,{backgroundColor:otherConnected?C.c3:C.c4}]}/>
 <Text style={[s.statusTxt,{color:otherConnected?C.c3:C.c4}]}>{mode==='A'?'TEL B':'TEL A'} {otherConnected?'✅':'❌'}</Text>
+{mode==='A'&&(<>
+<View style={{width:1,height:16,backgroundColor:C.b1,marginHorizontal:12}}/>
+<View style={[s.statusDot,{backgroundColor:remoteCardOk?C.c3:C.c4}]}/>
+<Text style={[s.statusTxt,{color:remoteCardOk?C.c3:C.c4}]}>{remoteCardOk?'CARD B ✅':'CARD B ❌'}</Text>
+</>)}
 </View>
 <ScrollView contentContainerStyle={s.pg}>
 <View style={[s.statusCard,{borderColor:mode==='A'?(hceActive?C.c3:C.c4):(cardOk?C.c3:C.t3)}]}>
