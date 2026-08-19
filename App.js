@@ -1,7 +1,6 @@
 import WebRTCClient from "./webrtc";
 import{useState,useRef,useEffect,useCallback}from'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Crypto from 'expo-crypto';
 import{View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,StatusBar,NativeModules,NativeEventEmitter,Platform,AppState}from'react-native';
 import{SafeAreaView}from'react-native-safe-area-context';
 import NfcManager,{NfcTech}from'react-native-nfc-manager';
@@ -12,6 +11,46 @@ const SERVER_URL='ws://84.252.120.21:8080';
 function bH(b=[]){return Array.from(b).map(x=>(x&0xFF).toString(16).toUpperCase().padStart(2,'0')).join('')}
 function hB(h=''){const c=h.replace(/\s/g,'');return Array.from({length:c.length/2},(_,i)=>parseInt(c.substring(i*2,i*2+2),16))}
 function fT(ts){const d=new Date(ts);return`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`}
+
+function sha256(ascii){
+function rightRotate(value,amount){return(value>>>amount)|(value<<(32-amount));}
+var mathPow=Math.pow,maxWord=mathPow(2,32),lengthProperty='length',i,j,result='',words=[],asciiBitLength=ascii[lengthProperty]*8;
+var hash=sha256.h=sha256.h||[],k=sha256.k=sha256.k||[],primeCounter=k[lengthProperty],isComposite={};
+for(var candidate=2;primeCounter<64;candidate++){
+if(!isComposite[candidate]){
+for(i=0;i<313;i+=candidate)isComposite[i]=candidate;
+hash[primeCounter]=(mathPow(candidate,.5)*maxWord)|0;
+k[primeCounter++]=(mathPow(candidate,1/3)*maxWord)|0;
+}}
+ascii+='\x80';
+while(ascii[lengthProperty]%64-56)ascii+='\x00';
+for(i=0;i<ascii[lengthProperty];i++){
+j=ascii.charCodeAt(i);
+if(j>>8)return'';
+words[i>>2]|=j<<((3-i)%4)*8;
+}
+words[words[lengthProperty]]=((asciiBitLength/maxWord)|0);
+words[words[lengthProperty]]=asciiBitLength;
+for(j=0;j<words[lengthProperty];){
+var w=words.slice(j,j+=16),oldHash=hash.slice(0),h=hash.slice(0);
+for(i=0;i<64;i++){
+var w15=w[i-15],w2=w[i-2];
+var a=h[0],e=h[4];
+var temp1=h[7]+(rightRotate(e,6)^rightRotate(e,11)^rightRotate(e,25))+((e&h[5])^((~e)&h[6]))+k[i]+
+(w[i]=(i<16)?w[i]:(w[i-16]+(rightRotate(w15,7)^rightRotate(w15,18)^(w15>>>3))+w[i-7]+(rightRotate(w2,17)^rightRotate(w2,19)^(w2>>>10)))|0);
+var temp2=(rightRotate(a,2)^rightRotate(a,13)^rightRotate(a,22))+((a&h[1])^(a&h[2])^(h[1]&h[2]));
+h=[(temp1+temp2)|0].concat(h);
+h[4]=(h[4]+temp1)|0;
+h.pop();
+}
+for(i=0;i<8;i++)hash[i]=(hash[i]+h[i])|0;
+}
+for(i=0;i<8;i++)for(j=3;j+1;j--){
+var b=(hash[i]>>(j*8))&255;
+result+=(b<16?'0':'')+b.toString(16);
+}
+return result;
+}
 
 // Reset complet NFC - rezolva "only one card at a time"
 async function resetNfc(){
@@ -546,10 +585,7 @@ autoCapitalize="none"
 <TouchableOpacity
 style={s.activationBtn}
 onPress={async()=>{
-const hash=await Crypto.digestStringAsync(
-Crypto.CryptoDigestAlgorithm.SHA256,
-activationCode
-);
+const hash=sha256(activationCode);
 if(hash===ACTIVATION_HASH){
 await AsyncStorage.setItem('nfctuneless_activated','yes');
 setActivated(true);
