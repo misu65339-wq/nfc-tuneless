@@ -1,6 +1,6 @@
 import WebRTCClient from "./webrtc";
 import{useState,useRef,useEffect,useCallback}from'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import{AsyncStorage}from'react-native';
 import{View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,StatusBar,NativeModules,NativeEventEmitter,Platform,AppState}from'react-native';
 import{SafeAreaView}from'react-native-safe-area-context';
 import NfcManager,{NfcTech}from'react-native-nfc-manager';
