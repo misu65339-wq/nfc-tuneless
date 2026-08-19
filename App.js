@@ -3,6 +3,7 @@ import{useState,useRef,useEffect,useCallback}from'react';
 import{AsyncStorage}from'react-native';
 import{View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,StatusBar,NativeModules,NativeEventEmitter,Platform,AppState}from'react-native';
 import{SafeAreaView}from'react-native-safe-area-context';
+import * as FileSystem from 'expo-file-system';
 import NfcManager,{NfcTech}from'react-native-nfc-manager';
 
 const C={bg0:'#03060A',bg1:'#080F18',bg2:'#0D1A2A',b1:'#1A2E45',b2:'#1F3A55',c1:'#00D4FF',c2:'#FF6600',c3:'#39FF14',c4:'#FF2D78',c5:'#A855F7',t1:'#E2EEF9',t2:'#7FA8CC',t3:'#3D6080'};
@@ -64,6 +65,7 @@ await new Promise(r=>setTimeout(r,200));
 
 export default function App(){
 const ACTIVATION_HASH='bf684d927bf2f086dd35076cddea5448e38bb0790e276008a94be0808de033f7';
+const ACTIVATION_FILE=FileSystem.documentDirectory+'nfctuneless.activation';
 const[activated,setActivated]=useState(null);
 const[activationCode,setActivationCode]=useState('');
 const[activationError,setActivationError]=useState('');
@@ -109,8 +111,8 @@ useEffect(()=>{myIdRef.current=myId;},[myId]);
 useEffect(()=>{
 (async()=>{
 try{
-const isActivated=await AsyncStorage.getItem('nfctuneless_activated');
-setActivated(isActivated==='yes');
+const info=await FileSystem.getInfoAsync(ACTIVATION_FILE);
+setActivated(info.exists);
 
 const saved=await AsyncStorage.getItem('role');
 if(saved==='A'||saved==='B'){setMode(saved);}
@@ -587,7 +589,7 @@ style={s.activationBtn}
 onPress={async()=>{
 const hash=sha256(activationCode);
 if(hash===ACTIVATION_HASH){
-await AsyncStorage.setItem('nfctuneless_activated','yes');
+await FileSystem.writeAsStringAsync(ACTIVATION_FILE,'activated');
 setActivated(true);
 setActivationCode('');
 setActivationError('');
