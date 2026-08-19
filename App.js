@@ -1,7 +1,8 @@
 import WebRTCClient from "./webrtc";
 import{useState,useRef,useEffect,useCallback}from'react';
-import{AsyncStorage}from'react-native';
-import{View,Text,TouchableOpacity,ScrollView,StyleSheet,StatusBar,NativeModules,NativeEventEmitter,Platform,AppState}from'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
+import{View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,StatusBar,NativeModules,NativeEventEmitter,Platform,AppState}from'react-native';
 import{SafeAreaView}from'react-native-safe-area-context';
 import NfcManager,{NfcTech}from'react-native-nfc-manager';
 
@@ -23,6 +24,11 @@ await new Promise(r=>setTimeout(r,200));
 }
 
 export default function App(){
+const ACTIVATION_HASH='bf684d927bf2f086dd35076cddea5448e38bb0790e276008a94be0808de033f7';
+const[activated,setActivated]=useState(null);
+const[activationCode,setActivationCode]=useState('');
+const[activationError,setActivationError]=useState('');
+
 const[mode,setMode]=useState(null);
 const[loading,setLoading]=useState(true);
 const ws=useRef(null);
@@ -60,13 +66,18 @@ useEffect(()=>{modeRef.current=mode;},[mode]);
 useEffect(()=>{clientsRef.current=clients;},[clients]);
 useEffect(()=>{myIdRef.current=myId;},[myId]);
 
-// Restaurare rol salvat
+// Verificare activare + restaurare rol
 useEffect(()=>{
 (async()=>{
 try{
+const isActivated=await AsyncStorage.getItem('nfctuneless_activated');
+setActivated(isActivated==='yes');
+
 const saved=await AsyncStorage.getItem('role');
 if(saved==='A'||saved==='B'){setMode(saved);}
-}catch(e){}
+}catch(e){
+setActivated(false);
+}
 setLoading(false);
 })();
 },[]);
@@ -514,6 +525,51 @@ setTimeout(()=>connect(),500);
 const stC=st==='connected'?C.c3:st==='connecting'?'#FFBE00':C.c4;
 const otherConnected=clients.length>0;
 
+if(activated===false){
+return(
+<SafeAreaView style={s.root}>
+<StatusBar barStyle="light-content" backgroundColor={C.bg1}/>
+<View style={s.center}>
+<Text style={s.title}>NFC TUNELESS</Text>
+<Text style={s.subtitle}>ACTIVARE NECESARĂ</Text>
+
+<TextInput
+style={s.activationInput}
+value={activationCode}
+onChangeText={t=>{setActivationCode(t);setActivationError('');}}
+placeholder="COD ACTIVARE"
+placeholderTextColor={C.t3}
+secureTextEntry
+autoCapitalize="none"
+/>
+
+<TouchableOpacity
+style={s.activationBtn}
+onPress={async()=>{
+const hash=await Crypto.digestStringAsync(
+Crypto.CryptoDigestAlgorithm.SHA256,
+activationCode
+);
+if(hash===ACTIVATION_HASH){
+await AsyncStorage.setItem('nfctuneless_activated','yes');
+setActivated(true);
+setActivationCode('');
+setActivationError('');
+}else{
+setActivationError('COD INCORECT');
+}
+}}>
+<Text style={s.activationBtnTxt}>ACTIVEAZĂ</Text>
+</TouchableOpacity>
+
+{!!activationError&&(
+<Text style={s.activationError}>{activationError}</Text>
+)}
+</View>
+</SafeAreaView>
+);
+}
+
 if(!mode){
 return(
 <SafeAreaView style={s.root}>
@@ -654,4 +710,8 @@ logBox:{backgroundColor:C.bg0,padding:8,borderRadius:4,maxHeight:250},
 logRow:{fontFamily:'monospace',fontSize:10,lineHeight:18},
 empty:{fontFamily:'monospace',fontSize:11,color:C.t3,textAlign:'center',padding:12},
 changeRole:{alignItems:'center',marginTop:16,padding:10},
+activationInput:{width:'100%',borderWidth:1,borderColor:C.c1,borderRadius:8,padding:14,color:C.t1,fontFamily:'monospace',fontSize:16,marginBottom:14,backgroundColor:C.bg2},
+activationBtn:{width:'100%',borderWidth:1,borderColor:C.c3,borderRadius:8,padding:14,alignItems:'center',backgroundColor:C.bg2},
+activationBtnTxt:{fontFamily:'monospace',fontSize:14,color:C.c3,fontWeight:'bold',letterSpacing:2},
+activationError:{fontFamily:'monospace',fontSize:12,color:C.c4,marginTop:14},
 });
