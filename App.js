@@ -113,12 +113,15 @@ useEffect(()=>{
 try{
 const info=await FileSystem.getInfoAsync(ACTIVATION_FILE);
 setActivated(info.exists);
-
-const saved=await AsyncStorage.getItem('role');
-if(saved==='A'||saved==='B'){setMode(saved);}
 }catch(e){
 setActivated(false);
 }
+
+try{
+const saved=await AsyncStorage.getItem('role');
+if(saved==='A'||saved==='B'){setMode(saved);}
+}catch(e){}
+
 setLoading(false);
 })();
 },[]);
