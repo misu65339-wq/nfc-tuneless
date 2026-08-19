@@ -9,23 +9,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+
       - uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+
       - name: Install dependencies
         run: npm install
+
       - name: Prebuild
         run: npx expo prebuild --platform android --no-install
+
+      - name: Restore release keystore
+        run: |
+          echo "${{ secrets.NFCTUNELESS_KEYSTORE_B64 }}" | base64 --decode > android/app/nfctuneless-release.jks
+
       - name: Build APK
+        env:
+          ORG_GRADLE_PROJECT_NFCTUNELESS_STORE_FILE: nfctuneless-release.jks
+          ORG_GRADLE_PROJECT_NFCTUNELESS_STORE_PASSWORD: ${{ secrets.NFCTUNELESS_STORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_NFCTUNELESS_KEY_ALIAS: ${{ secrets.NFCTUNELESS_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_NFCTUNELESS_KEY_PASSWORD: ${{ secrets.NFCTUNELESS_KEY_PASSWORD }}
         run: cd android && ./gradlew assembleRelease
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: nfc-tuneless.apk
           path: android/app/build/outputs/apk/release/app-release.apk
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
