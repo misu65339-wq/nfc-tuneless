@@ -15,7 +15,7 @@ function fT(ts){const d=new Date(ts);return`${String(d.getHours()).padStart(2,'0
 function sha256(ascii){
 function rightRotate(value,amount){return(value>>>amount)|(value<<(32-amount));}
 var mathPow=Math.pow,maxWord=mathPow(2,32),lengthProperty='length',i,j,result='',words=[],asciiBitLength=ascii[lengthProperty]*8;
-var hash=sha256.h=sha256.h||[],k=sha256.k=sha256.k||[],primeCounter=k[lengthProperty],isComposite={};
+var hash=[],k=[],primeCounter=0,isComposite={};
 for(var candidate=2;primeCounter<64;candidate++){
 if(!isComposite[candidate]){
 for(i=0;i<313;i+=candidate)isComposite[i]=candidate;
