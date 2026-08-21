@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [ master, native-fast-relay ]
+    branches: [ master, native-fast-relay, server2-vps ]
 
 jobs:
   build:
