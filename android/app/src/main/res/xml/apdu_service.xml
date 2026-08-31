@@ -17,6 +17,7 @@
         <aid-filter android:name="A0000000980840"/>
         <aid-filter android:name="A0000000421010"/>
         <aid-filter android:name="A0000001410001"/>
+        <aid-filter android:name="A0000001761010"/>
         <aid-filter android:name="F0010203040506"/>
     </aid-group>
     <aid-group android:description="@string/app_name"
@@ -32,6 +33,7 @@
         <aid-filter android:name="A0000000980840"/>
         <aid-filter android:name="A0000000421010"/>
         <aid-filter android:name="A0000001410001"/>
+        <aid-filter android:name="A0000001761010"/>
         <aid-filter android:name="F0010203040506"/>
     </aid-group>
 </host-apdu-service>
