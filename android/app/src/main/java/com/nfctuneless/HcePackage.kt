@@ -6,6 +6,6 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 
 class HcePackage : ReactPackage {
-    override fun createNativeModules(ctx: ReactApplicationContext): List<NativeModule> = listOf(HceModule(ctx))
+    override fun createNativeModules(ctx: ReactApplicationContext): List<NativeModule> = listOf(HceModule(ctx), DataLogModule(ctx))
     override fun createViewManagers(ctx: ReactApplicationContext): List<ViewManager<*, *>> = emptyList()
 }

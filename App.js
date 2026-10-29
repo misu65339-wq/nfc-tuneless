@@ -1,4 +1,5 @@
 import WebRTCClient from "./webrtc";
+import DataLogScreen from "./DataLogScreen";
 import{useState,useRef,useEffect,useCallback}from'react';
 import{AsyncStorage}from'react-native';
 import{View,Text,TextInput,TouchableOpacity,ScrollView,StyleSheet,StatusBar,NativeModules,NativeEventEmitter,Platform,AppState}from'react-native';
@@ -64,6 +65,12 @@ await new Promise(r=>setTimeout(r,200));
 }
 
 export default function App(){
+// DATA_LOG_INTEGRATION_V1
+const[dataLogOpen,setDataLogOpen]=useState(false);
+const dataLogSession=useRef(
+  Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10)
+);
+
 const ACTIVATION_HASH='bf684d927bf2f086dd35076cddea5448e38bb0790e276008a94be0808de033f7';
 const ACTIVATION_FILE=FileSystem.documentDirectory+'nfctuneless.activation';
 const[activated,setActivated]=useState(null);
@@ -100,6 +107,23 @@ const[nfcOk,setNfcOk]=useState(false);
 const[stats,setStats]=useState({total:0,ok:0,fail:0});
 
 const addLog=useCallback((msg,color)=>{
+// Stocăm numai categoria evenimentului, niciodată textul brut.
+try{
+  const text=String(msg||'').toUpperCase();
+  let event='STATUS';
+  if(text.includes('A → B')||text.includes('A->B'))event='RELAY_REQUEST';
+  else if(text.includes('B → A')||text.includes('B->A'))event='RELAY_RESPONSE';
+  else if(text.includes('EROARE')||text.includes('ERROR')||text.includes('FAIL'))event='ERROR';
+  else if(text.includes('DECONECT'))event='DISCONNECTION';
+  else if(text.includes('CONECT'))event='CONNECTION';
+  else if(text.includes('NFC')||text.includes('CARD'))event='NFC';
+  NativeModules.DataLogModule.appendEvent(
+    dataLogSession.current,
+    modeRef.current||'A',
+    event
+  ).catch(()=>{});
+}catch(e){}
+
 setLogs(p=>[{msg,color:color||C.t2,ts:Date.now()},...p].slice(0,50));
 },[]);
 
@@ -665,6 +689,14 @@ return(
 <Text style={[s.statusTxt,{color:remoteCardOk?C.c3:C.c4}]}>{remoteCardOk?'CARD B ✅':'CARD B ❌'}</Text>
 </>)}
 </View>
+{dataLogOpen&&(
+  <View style={{
+    position:'absolute',top:0,bottom:0,left:0,right:0,
+    zIndex:100,backgroundColor:C.bg0
+  }}>
+    <DataLogScreen onClose={()=>setDataLogOpen(false)}/>
+  </View>
+)}
 <ScrollView contentContainerStyle={s.pg}>
 <View style={[s.statusCard,{borderColor:mode==='A'?(hceActive?C.c3:C.c4):(cardOk?C.c3:C.t3)}]}>
 <Text style={s.statusIcon}>{mode==='A'?(hceActive?'✅':'⏳'):(cardOk?'✅':'⏳')}</Text>
@@ -701,6 +733,12 @@ disabled={st!=='connected'}>
 ))}
 </View>
 </View>
+<TouchableOpacity
+  style={[s.manualBtn,{borderColor:C.c1,marginTop:14}]}
+  onPress={()=>setDataLogOpen(true)}
+>
+  <Text style={[s.manualBtnTxt,{color:C.c1}]}>▣ DATA LOG</Text>
+</TouchableOpacity>
 <TouchableOpacity style={s.changeRole} onPress={async()=>{
 autoRestartRef.current=false;
 stopHce();
