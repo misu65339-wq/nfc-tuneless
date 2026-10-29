@@ -208,6 +208,91 @@ class DataLogModule(private val ctx: ReactApplicationContext) :
         }
     }
 
+
+    // DATA_LOG_REAL_APDU_V2
+    // Persistă mesajele APDU în același fișier AES-GCM
+    // utilizat deja de DATA LOG.
+    //
+    // Scrierea funcționează și când ecranul este blocat.
+    // Citirea rămâne protejată de autentificarea existentă.
+
+    @ReactMethod
+    fun appendApdu(
+        session: String,
+        role: String,
+        direction: String,
+        requestId: String,
+        hexValue: String,
+        promise: Promise
+    ) {
+        synchronized(lock) {
+            try {
+                if (!prefs.contains("hash")) {
+                    promise.resolve(false)
+                    return
+                }
+
+                val hex = hexValue
+                    .replace("\\s".toRegex(), "")
+                    .uppercase()
+
+                require(hex.isNotEmpty()) {
+                    "APDU gol"
+                }
+
+                require(hex.length % 2 == 0) {
+                    "Lungime HEX invalidă"
+                }
+
+                require(hex.length <= 131072) {
+                    "APDU prea lung"
+                }
+
+                require(hex.all {
+                    it in '0'..'9' || it in 'A'..'F'
+                }) {
+                    "Caractere HEX invalide"
+                }
+
+                require(
+                    direction == "A → B" ||
+                    direction == "B → A"
+                ) {
+                    "Direcție invalidă"
+                }
+
+                val row = JSONObject()
+                    .put("timestamp", System.currentTimeMillis())
+                    .put("session", session.take(80))
+                    .put("role", if (role == "B") "B" else "A")
+                    .put(
+                        "event",
+                        if (direction == "A → B")
+                            "APDU_COMMAND"
+                        else
+                            "APDU_RESPONSE"
+                    )
+                    .put("direction", direction)
+                    .put("requestId", requestId.take(80))
+                    .put("hex", hex)
+                    .put("bytes", hex.length / 2)
+
+                val rows = readRows()
+                rows.put(row)
+                writeRows(rows)
+
+                promise.resolve(true)
+
+            } catch (e: Exception) {
+                promise.reject(
+                    "DATA_LOG_APDU_ERROR",
+                    e.message,
+                    e
+                )
+            }
+        }
+    }
+
     @ReactMethod
     fun listEvents(promise: Promise) {
         synchronized(lock) {

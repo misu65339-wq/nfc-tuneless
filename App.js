@@ -106,6 +106,31 @@ const[hceActive,setHceActive]=useState(false);
 const[nfcOk,setNfcOk]=useState(false);
 const[stats,setStats]=useState({total:0,ok:0,fail:0});
 
+
+// DATA_LOG_REAL_APDU_V2
+// Nu modifică jurnalul vizibil de pe ecranul principal.
+const saveApduHex=(role,direction,requestId,value)=>{
+  try{
+    const hex=String(value||'')
+      .replace(/\\s/g,'')
+      .toUpperCase();
+
+    if(
+      !hex ||
+      hex.length%2!==0 ||
+      !/^[0-9A-F]+$/.test(hex)
+    )return;
+
+    NativeModules.DataLogModule?.appendApdu(
+      dataLogSession.current,
+      role,
+      direction,
+      String(requestId||''),
+      hex
+    ).catch(()=>{});
+  }catch(e){}
+};
+
 const addLog=useCallback((msg,color)=>{
 // Stocăm numai categoria evenimentului, niciodată textul brut.
 try{
@@ -315,11 +340,16 @@ const emitter=new NativeEventEmitter(HceModule);
 const sub=emitter.addListener('onApduCommand',(event)=>{
 const{requestId,apdu,nativeStartMs}=event;
 
+// DATA LOG: comanda reală primită de telefonul A.
+saveApduHex('A','A → B',requestId,apdu);
+
 setStats(p=>({...p,total:p.total+1}));
 const target=clientsRef.current.find(c=>c.id!==myIdRef.current);
 if(ws.current?.readyState===1&&target){
 pending.current[requestId]={start:Date.now(),
 resolve:(resp)=>{
+// DATA LOG: răspunsul real returnat către cititor.
+saveApduHex('A','B → A',requestId,resp);
 try{HceModule.deliverResponse(requestId,resp);}catch(e){}
 addLog('B → A',C.c3);
 setStats(p=>({...p,ok:p.ok+1}));
@@ -413,10 +443,14 @@ rtc.current=new WebRTCClient(
         }
                 addLog('A → B',C.c2);
         if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
+          // DATA LOG: comandă reală recepționată prin WebRTC.
+          saveApduHex('B','A → B',m.requestId,m.apdu);
           try{
             apduBusyRef.current=true;
             const resp=await NfcManager.isoDepHandler.transceive(hB(m.apdu||''));
             const respHex=bH(resp);
+// DATA LOG: răspunsul real al tagului.
+saveApduHex('B','B → A',m.requestId,respHex);
 
             const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex};
             if(rtc.current?.channel?.readyState==='open')rtc.current.send(`S|${m.requestId}|${respHex}`);
@@ -532,11 +566,15 @@ setTimeout(()=>{delete processedApduRef.current[apduReqKey];},5000);
 }
 addLog('A → B',C.c2);
 if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
+// DATA LOG: comandă reală recepționată prin WebSocket.
+saveApduHex('B','A → B',m.requestId,m.apdu);
 (async()=>{
 try{
 apduBusyRef.current=true;
 const resp=await NfcManager.isoDepHandler.transceive(hB(m.apdu||''));
 const respHex=bH(resp);
+// DATA LOG: răspunsul real al tagului.
+saveApduHex('B','B → A',m.requestId,respHex);
 ws.current?.send(JSON.stringify({type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex}));
 addLog('B → A',C.c3);
 }catch(e){

@@ -60,7 +60,22 @@ export default function DataLogScreen({onClose}){
   };
 
   const format=row=>{
-    const time=new Date(row.timestamp).toLocaleString('ro-RO');
+    const time=new Date(row.timestamp)
+      .toLocaleString('ro-RO');
+
+    if(row.hex){
+      return [
+        time,
+        `SESIUNE: ${row.session}`,
+        `TELEFON: ${row.role}`,
+        `DIRECȚIE: ${row.direction}`,
+        `TIP: ${row.event}`,
+        `REQUEST ID: ${row.requestId||'-'}`,
+        `LUNGIME: ${row.bytes} bytes`,
+        `HEX: ${row.hex}`
+      ].join('\\n');
+    }
+
     return `${time} | Sesiune ${row.session} | Telefon ${row.role} | ${row.event}`;
   };
 
@@ -191,7 +206,7 @@ export default function DataLogScreen({onClose}){
             <View style={s.row} key={index}>
               <Text style={s.rowText}>{format(row)}</Text>
               <TouchableOpacity
-                onPress={()=>DataLogModule.copyText(format(row))
+                onPress={()=>DataLogModule.copyText(row.hex||format(row))
                   .then(()=>Alert.alert('DATA LOG','Înregistrare copiată.'))
                   .catch(e=>Alert.alert('Eroare',String(e.message||e)))}
               >
