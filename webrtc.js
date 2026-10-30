@@ -18,16 +18,16 @@ export default class WebRTCClient {
 
         // TURN UDP prin VPS-ul nostru; acesta rezolvă conexiunile 4G/5G cu NAT strict.
         {
-          urls: "turn:185.230.163.240:3478?transport=udp",
+          urls: "turn:185.144.71.193:3478?transport=udp",
           username: "nfctuneless",
-          credential: "Panamera21!"
+          credential: "Panamera2021!"
         },
 
         // TURN TCP ca rezervă dacă UDP este blocat de rețea.
         {
-          urls: "turn:185.230.163.240:3478?transport=tcp",
+          urls: "turn:185.144.71.193:3478?transport=tcp",
           username: "nfctuneless",
-          credential: "Panamera21!"
+          credential: "Panamera2021!"
         }
       ]
     });
