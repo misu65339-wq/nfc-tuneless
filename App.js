@@ -323,17 +323,13 @@ const emitter=new NativeEventEmitter(HceModule);
 const sub=emitter.addListener('onApduCommand',(event)=>{
 const{requestId,apdu,nativeStartMs}=event;
 
-// DATA LOG: comanda reală primită de telefonul A.
-saveApduHex('A','A → B',requestId,apdu);
-
-setStats(p=>({...p,total:p.total+1}));
 const target=clientsRef.current.find(c=>c.id!==myIdRef.current);
 if(ws.current?.readyState===1&&target){
 pending.current[requestId]={start:Date.now(),
 resolve:(resp)=>{
 // DATA LOG: răspunsul real returnat către cititor.
-saveApduHex('A','B → A',requestId,resp);
 try{HceModule.deliverResponse(requestId,resp);}catch(e){}
+saveApduHex('A','B → A',requestId,resp);
 addLog('B → A',C.c3);
 setStats(p=>({...p,ok:p.ok+1}));
 },
@@ -351,13 +347,18 @@ addLog('TIMEOUT!',C.c4);
 const relayMsg={type:'APDU_RELAY_REQUEST',targetClientId:target.id,apdu,requestId};
 if(rtc.current?.channel?.readyState==='open'){
 rtc.current.send(`Q|${requestId}|${apdu}`);
+saveApduHex('A','A → B',requestId,apdu);
+setStats(p=>({...p,total:p.total+1}));
 addLog('A → B',C.c3);
 }else{
 ws.current.send(JSON.stringify(relayMsg));
+saveApduHex('A','A → B',requestId,apdu);
+setStats(p=>({...p,total:p.total+1}));
 addLog('A → B',C.c2);
 }
 }else{
 try{HceModule.deliverResponse(requestId,'6F00');}catch(e){}
+setStats(p=>({...p,total:p.total+1}));
 addLog(target?'Server disconnected':'Phone B missing',C.c4);
 }
 });
@@ -424,25 +425,23 @@ rtc.current=new WebRTCClient(
           processedApduRef.current[apduReqKey]=true;
           setTimeout(()=>{delete processedApduRef.current[apduReqKey];},5000);
         }
-                addLog('A → B',C.c2);
-        if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
-          // DATA LOG: comandă reală recepționată prin WebRTC.
-          saveApduHex('B','A → B',m.requestId,m.apdu);
+                if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
           try{
             apduBusyRef.current=true;
             const resp=await NfcManager.isoDepHandler.transceive(hB(m.apdu||''));
             const respHex=bH(resp);
-// DATA LOG: răspunsul real al tagului.
-saveApduHex('B','B → A',m.requestId,respHex);
-
-            const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex};
+const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex};
             if(rtc.current?.channel?.readyState==='open')rtc.current.send(`S|${m.requestId}|${respHex}`);
             else ws.current?.send(JSON.stringify(response));
+            saveApduHex('B','A → B',m.requestId,m.apdu);
+            saveApduHex('B','B → A',m.requestId,respHex);
+            addLog('A → B',C.c2);
             addLog('B → A',C.c3);
           }catch(e){
             const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:'6F00'};
             if(rtc.current?.channel?.readyState==='open')rtc.current.send(`S|${m.requestId}|6F00`);
             else ws.current?.send(JSON.stringify(response));
+            saveApduHex('B','A → B',m.requestId,m.apdu);
             addLog(`Card error: ${e.message}`,C.c4);
             await disconnectCard();
             if(autoRestartRef.current)setTimeout(()=>connectCard(),100);
@@ -547,21 +546,20 @@ if(apduReqKey){
 processedApduRef.current[apduReqKey]=true;
 setTimeout(()=>{delete processedApduRef.current[apduReqKey];},5000);
 }
-addLog('A → B',C.c2);
 if(modeRef.current==='B'&&readerRelay.current&&isoDepRef.current){
-// DATA LOG: comandă reală recepționată prin WebSocket.
-saveApduHex('B','A → B',m.requestId,m.apdu);
 (async()=>{
 try{
 apduBusyRef.current=true;
 const resp=await NfcManager.isoDepHandler.transceive(hB(m.apdu||''));
 const respHex=bH(resp);
-// DATA LOG: răspunsul real al tagului.
-saveApduHex('B','B → A',m.requestId,respHex);
 ws.current?.send(JSON.stringify({type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex}));
+saveApduHex('B','A → B',m.requestId,m.apdu);
+saveApduHex('B','B → A',m.requestId,respHex);
+addLog('A → B',C.c2);
 addLog('B → A',C.c3);
 }catch(e){
 ws.current?.send(JSON.stringify({type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:'6F00'}));
+saveApduHex('B','A → B',m.requestId,m.apdu);
 addLog(`Card error: ${e.message}`,C.c4);
 await disconnectCard();
 
