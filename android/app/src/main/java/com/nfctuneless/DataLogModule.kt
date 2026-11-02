@@ -13,6 +13,8 @@ import java.io.File
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -30,6 +32,23 @@ class DataLogModule(private val ctx: ReactApplicationContext) :
     private val file = File(ctx.filesDir, "datalog_v1.enc")
     private val alias = "nfctuneless_datalog_v1"
     @Volatile private var unlocked = false
+
+    // APDU-urile vor fi colectate în memorie și salvate periodic.
+    private val pendingLock = Any()
+    private val pendingApdu = mutableListOf<JSONObject>()
+
+    // Fir separat, dedicat exclusiv salvării Data Log.
+    private val saveExecutor = Executors.newSingleThreadScheduledExecutor()
+
+    init {
+        saveExecutor.scheduleWithFixedDelay({
+            try {
+                flushPendingApdu()
+            } catch (e: Exception) {
+                android.util.Log.e("DataLogModule", "Salvare Data Log eșuată", e)
+            }
+        }, 5, 5, TimeUnit.SECONDS)
+    }
 
     private fun b64(bytes: ByteArray): String =
         Base64.encodeToString(bytes, Base64.NO_WRAP)
@@ -98,6 +117,31 @@ class DataLogModule(private val ctx: ReactApplicationContext) :
         if (!tmp.renameTo(file)) {
             tmp.delete()
             throw IllegalStateException("Nu s-a putut salva jurnalul")
+        }
+    }
+
+    // Salvează periodic APDU-urile acumulate.
+    private fun flushPendingApdu() {
+        synchronized(lock) {
+            val batch = synchronized(pendingLock) {
+                if (pendingApdu.isEmpty()) return
+                val copy = pendingApdu.toList()
+                pendingApdu.clear()
+                copy
+            }
+
+            try {
+                val rows = readRows()
+                for (row in batch) {
+                    rows.put(row)
+                }
+                writeRows(rows)
+            } catch (e: Exception) {
+                synchronized(pendingLock) {
+                    pendingApdu.addAll(0, batch)
+                }
+                throw e
+            }
         }
     }
 
@@ -225,7 +269,7 @@ class DataLogModule(private val ctx: ReactApplicationContext) :
         hexValue: String,
         promise: Promise
     ) {
-        synchronized(lock) {
+        synchronized(pendingLock) {
             try {
                 if (!prefs.contains("hash")) {
                     promise.resolve(false)
@@ -277,9 +321,9 @@ class DataLogModule(private val ctx: ReactApplicationContext) :
                     .put("hex", hex)
                     .put("bytes", hex.length / 2)
 
-                val rows = readRows()
-                rows.put(row)
-                writeRows(rows)
+                // Înregistrăm APDU-ul în memorie.
+                // Salvarea criptată se face periodic, la 5 secunde.
+                pendingApdu.add(row)
 
                 promise.resolve(true)
 
@@ -298,7 +342,16 @@ class DataLogModule(private val ctx: ReactApplicationContext) :
         synchronized(lock) {
             try {
                 require(unlocked) { "DATA LOG este blocat" }
-                promise.resolve(readRows().toString())
+                val rows = readRows()
+
+                // Includem și APDU-urile care așteaptă salvarea.
+                synchronized(pendingLock) {
+                    for (row in pendingApdu) {
+                        rows.put(row)
+                    }
+                }
+
+                promise.resolve(rows.toString())
             } catch (e: Exception) {
                 promise.reject("READ_ERROR", e.message, e)
             }
@@ -310,7 +363,13 @@ class DataLogModule(private val ctx: ReactApplicationContext) :
         synchronized(lock) {
             try {
                 require(unlocked) { "DATA LOG este blocat" }
+                // Ștergem mai întâi jurnalul criptat.
                 writeRows(JSONArray())
+
+                // Eliminăm și APDU-urile care așteptau salvarea.
+                synchronized(pendingLock) {
+                    pendingApdu.clear()
+                }
                 promise.resolve(true)
             } catch (e: Exception) {
                 promise.reject("DELETE_ERROR", e.message, e)

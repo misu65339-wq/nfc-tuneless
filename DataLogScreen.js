@@ -7,10 +7,72 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 
 const {DataLogModule}=NativeModules;
 
+// Ora locală cu precizie de milisecundă.
+const formatApduTime = timestamp => {
+  const d = new Date(timestamp);
+  const pad = (n, width = 2) => String(n).padStart(width, '0');
+
+  return [
+    pad(d.getHours()),
+    pad(d.getMinutes()),
+    pad(d.getSeconds())
+  ].join(':') + '.' + pad(d.getMilliseconds(), 3);
+};
+
 const C={
   bg:'#03060A',panel:'#0D1A2A',border:'#1A2E45',
   cyan:'#00D4FF',green:'#39FF14',red:'#FF2D78',
   text:'#E2EEF9',muted:'#7FA8CC'
+};
+
+// Păstrăm numai comenzile și răspunsurile APDU cu HEX.
+const isApduRow = row =>
+  row &&
+  (row.event === 'APDU_COMMAND' || row.event === 'APDU_RESPONSE') &&
+  typeof row.hex === 'string' &&
+  row.hex.length > 0;
+
+// Grupează APDU-urile după sesiune și requestId.
+const groupApduRows = rows => {
+  const sessions = new Map();
+
+  // rows este în ordine inversă; reconstruim ordinea cronologică.
+  for (const row of rows.slice().reverse()) {
+    const sessionId = String(row.session || 'unknown');
+    const requestId = String(row.requestId || '');
+
+    if (!sessions.has(sessionId)) {
+      sessions.set(sessionId, {
+        id: sessionId,
+        apdus: new Map()
+      });
+    }
+
+    const session = sessions.get(sessionId);
+
+    // Fără requestId, păstrăm fiecare înregistrare separat.
+    const apduKey = requestId ||
+      `missing-${session.apdus.size}`;
+
+    if (!session.apdus.has(apduKey)) {
+      session.apdus.set(apduKey, []);
+    }
+
+    session.apdus.get(apduKey).push(row);
+  }
+
+  return Array.from(sessions.values()).map(
+    (session, sessionIndex) => ({
+      id: session.id,
+      number: sessionIndex + 1,
+      apdus: Array.from(session.apdus.values()).map(
+        (items, apduIndex) => ({
+          number: apduIndex + 1,
+          rows: items
+        })
+      )
+    })
+  );
 };
 
 export default function DataLogScreen({onClose}){
@@ -22,6 +84,9 @@ export default function DataLogScreen({onClose}){
   const[rows,setRows]=useState([]);
   const[busy,setBusy]=useState(false);
 
+  // Datele grupate pentru afișarea SESSION / APDU.
+  const groupedSessions = groupApduRows(rows);
+
   useEffect(()=>{
     DataLogModule.isConfigured()
       .then(setConfigured)
@@ -31,7 +96,7 @@ export default function DataLogScreen({onClose}){
 
   const refresh=async()=>{
     const text=await DataLogModule.listEvents();
-    setRows(JSON.parse(text).reverse());
+    setRows(JSON.parse(text).filter(isApduRow).reverse());
   };
 
   const submit=async()=>{
@@ -79,11 +144,25 @@ export default function DataLogScreen({onClose}){
     return `${time} | Sesiune ${row.session} | Telefon ${row.role} | ${row.event}`;
   };
 
+  // Textul complet pentru EXPORT TEXT și COPIAZĂ TOT.
+  const formatGroupedLog = () =>
+    groupedSessions.map(session => {
+      const apdus = session.apdus.map(apdu => {
+        const messages = apdu.rows.map(row =>
+          `${formatApduTime(row.timestamp)}  ${row.direction}\nHEX: ${row.hex}`
+        ).join('\n\n');
+
+        return `APDU ${apdu.number}\n${messages}`;
+      }).join('\n\n');
+
+      return `SESSION ${session.number}\n\n${apdus}`;
+    }).join('\n\n');
+
   const exportData=async()=>{
     try{
       await Share.share({
         title:'NFC Tuneless DATA LOG',
-        message:rows.slice().reverse().map(format).join('\n')||'DATA LOG gol'
+        message:formatGroupedLog()||'DATA LOG gol'
       });
     }catch(e){Alert.alert('Export',String(e.message||e));}
   };
@@ -187,7 +266,7 @@ export default function DataLogScreen({onClose}){
             onPress={async()=>{
               try{
                 await DataLogModule.copyText(
-                  rows.slice().reverse().map(format).join('\n')
+                  formatGroupedLog()
                 );
                 Alert.alert('DATA LOG','Istoricul a fost copiat.');
               }catch(e){Alert.alert('Eroare',String(e.message||e));}
@@ -200,18 +279,53 @@ export default function DataLogScreen({onClose}){
             Exportul și clipboardul nu sunt criptate.
           </Text>
 
-          {rows.length===0?(
-            <Text style={s.info}>Nicio înregistrare.</Text>
-          ):rows.map((row,index)=>(
-            <View style={s.row} key={index}>
-              <Text style={s.rowText}>{format(row)}</Text>
-              <TouchableOpacity
-                onPress={()=>DataLogModule.copyText(row.hex||format(row))
-                  .then(()=>Alert.alert('DATA LOG','Înregistrare copiată.'))
-                  .catch(e=>Alert.alert('Eroare',String(e.message||e)))}
-              >
-                <Text style={s.copy}>COPY</Text>
-              </TouchableOpacity>
+          {groupedSessions.length===0?(
+            <Text style={s.info}>Nicio înregistrare APDU.</Text>
+          ):groupedSessions.map(session=>(
+            <View key={session.id}>
+              <Text style={s.heading}>
+                {`SESSION ${session.number}`}
+              </Text>
+
+              {session.apdus.map(apdu=>(
+                <View
+                  style={s.row}
+                  key={`${session.id}-${apdu.number}`}
+                >
+                  <Text style={s.heading}>
+                    {`APDU ${apdu.number}`}
+                  </Text>
+
+                  {apdu.rows.map((row,index)=>(
+                    <View
+                      key={index}
+                      style={{marginBottom:12}}
+                    >
+                      <Text style={s.rowText}>
+                        {`${formatApduTime(row.timestamp)}  ${row.direction}`}
+                      </Text>
+
+                      <Text style={s.rowText}>
+                        {`HEX: ${row.hex}`}
+                      </Text>
+
+                      <TouchableOpacity
+                        onPress={()=>DataLogModule.copyText(row.hex)
+                          .then(()=>Alert.alert(
+                            'DATA LOG',
+                            'HEX copiat.'
+                          ))
+                          .catch(e=>Alert.alert(
+                            'Eroare',
+                            String(e.message||e)
+                          ))}
+                      >
+                        <Text style={s.copy}>COPY</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              ))}
             </View>
           ))}
         </ScrollView>

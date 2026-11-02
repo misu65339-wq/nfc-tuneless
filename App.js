@@ -112,7 +112,7 @@ const[stats,setStats]=useState({total:0,ok:0,fail:0});
 const saveApduHex=(role,direction,requestId,value)=>{
   try{
     const hex=String(value||'')
-      .replace(/\\s/g,'')
+      .replace(/\s/g,'')
       .toUpperCase();
 
     if(
@@ -132,23 +132,6 @@ const saveApduHex=(role,direction,requestId,value)=>{
 };
 
 const addLog=useCallback((msg,color)=>{
-// Stocăm numai categoria evenimentului, niciodată textul brut.
-try{
-  const text=String(msg||'').toUpperCase();
-  let event='STATUS';
-  if(text.includes('A → B')||text.includes('A->B'))event='RELAY_REQUEST';
-  else if(text.includes('B → A')||text.includes('B->A'))event='RELAY_RESPONSE';
-  else if(text.includes('EROARE')||text.includes('ERROR')||text.includes('FAIL'))event='ERROR';
-  else if(text.includes('DECONECT'))event='DISCONNECTION';
-  else if(text.includes('CONECT'))event='CONNECTION';
-  else if(text.includes('NFC')||text.includes('CARD'))event='NFC';
-  NativeModules.DataLogModule.appendEvent(
-    dataLogSession.current,
-    modeRef.current||'A',
-    event
-  ).catch(()=>{});
-}catch(e){}
-
 setLogs(p=>[{msg,color:color||C.t2,ts:Date.now()},...p].slice(0,50));
 },[]);
 
