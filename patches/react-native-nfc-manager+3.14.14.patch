@@ -1,0 +1,19 @@
+diff --git a/node_modules/react-native-nfc-manager/android/src/main/java/community/revteltech/nfc/NfcManager.java b/node_modules/react-native-nfc-manager/android/src/main/java/community/revteltech/nfc/NfcManager.java
+index 76481b8..b7e694c 100644
+--- a/node_modules/react-native-nfc-manager/android/src/main/java/community/revteltech/nfc/NfcManager.java
++++ b/node_modules/react-native-nfc-manager/android/src/main/java/community/revteltech/nfc/NfcManager.java
+@@ -140,6 +140,14 @@ class NfcManager extends ReactContextBaseJavaModule implements ActivityEventList
+                 callback.invoke(ERR_MULTI_REQ);
+             } else {
+                 techRequest = new TagTechnologyRequest(techs.toArrayList(), callback);
++                if (tag != null && !techRequest.isConnected()) {
++                    boolean connected = techRequest.connect(tag);
++                    if (connected) {
++                        techRequest.invokePendingCallback(techRequest.getTechType());
++                    } else {
++                        tag = null;
++                    }
++                }
+             }
+         }
+     }

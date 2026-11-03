@@ -201,6 +201,8 @@ try{
 await disconnectCard(false);
 addLog('Hold card near phone',C.t2);
 
+// Recupereaza cardul primit prin Android Tag Dispatch.
+try { await NfcManager.getLaunchTagEvent(); } catch (e) {}
 await NfcManager.requestTechnology([NfcTech.IsoDep]);
 
 try{

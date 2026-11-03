@@ -60,13 +60,15 @@ class MainActivity : ReactActivity() {
     }
 
     override fun onPause() {
-        // Experimental: keep NFC foreground dispatch enabled when app is not visible.
-        // Goal: allow Phone B to continue reading card while another app is on screen.
+        try {
+            nfcAdapter?.disableForegroundDispatch(this)
+        } catch (e: Exception) {}
         super.onPause()
     }
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
+        if (intent != null) setIntent(intent)
         // Mentine activitatea in foreground cand primeste NFC intent
         try {
             intent?.let {
