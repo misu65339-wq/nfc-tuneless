@@ -404,6 +404,7 @@ ws.current=s;
 s.onopen=()=>{
 setSt('connected');
 
+rtc.current?.close();
 rtc.current=new WebRTCClient(
   msg=>ws.current?.send(JSON.stringify(msg)),
   async data=>{
@@ -483,8 +484,58 @@ const response={type:'APDU_RELAY_RESPONSE',requestId:m.requestId,apdu:respHex};
     }
   },
   status=>{
-    if(status==='WEBRTC_OPEN')addLog('🟢 WebRTC connected',C.c3);
+    if(status==='WEBRTC_OPEN'){
+      if(rtc.current?.fullResetTimer){
+        clearTimeout(rtc.current.fullResetTimer);
+        rtc.current.fullResetTimer=null;
+      }
+      addLog('🟢 WebRTC connected',C.c3);
+    }
     else if(status==='WEBRTC_CLOSED')addLog('🔴 WebRTC disconnected',C.c4);
+    if(status==='ICE_CONNECTED'||status==='ICE_COMPLETED'){
+      if(rtc.current?.fullResetTimer){
+        clearTimeout(rtc.current.fullResetTimer);
+        rtc.current.fullResetTimer=null;
+      }
+    }
+    else if(status==='ICE_FAILED'&&modeRef.current==='B'){
+      if(ws.current?.readyState===1)
+        ws.current.send(JSON.stringify({type:'ice_restart_request'}));
+    }
+    else if(status==='ICE_DISCONNECTED'&&modeRef.current==='B'){
+      setTimeout(()=>{
+        if(rtc.current?.pc?.iceConnectionState==='disconnected'&&ws.current?.readyState===1)
+          ws.current.send(JSON.stringify({type:'ice_restart_request'}));
+      },5000);
+    }
+    if(status==='ICE_FAILED'||status==='ICE_DISCONNECTED'){
+      if(modeRef.current==='A'){
+        const oldRtc=rtc.current;
+        if(oldRtc && !oldRtc.fullResetTimer){
+          oldRtc.fullResetTimer=setTimeout(()=>{
+            oldRtc.fullResetTimer=null;
+            if(rtc.current!==oldRtc || ws.current?.readyState!==1) return;
+            const state=oldRtc.pc?.iceConnectionState;
+            if(state==='failed'||state==='disconnected'){
+              rtc.current=oldRtc.createFreshConnection();
+              rtc.current.createFullResetOffer();
+            }
+          },15000);
+        }
+      }
+      if(modeRef.current==='B'){
+        const oldRtc=rtc.current;
+        if(oldRtc && !oldRtc.fullResetTimer){
+          oldRtc.fullResetTimer=setTimeout(()=>{
+          oldRtc.fullResetTimer=null;
+          if(rtc.current!==oldRtc || ws.current?.readyState!==1) return;
+          const state=oldRtc?.pc?.iceConnectionState;
+          if(state==='failed'||state==='disconnected')
+            ws.current.send(JSON.stringify({type:'webrtc_full_reset_request'}));
+          },15000);
+        }
+      }
+    }
     else if(status==='WEBRTC_CHANNEL_RECEIVED'){}
     else {}
   }
@@ -499,28 +550,54 @@ HceModule?.startForegroundService&&HceModule.startForegroundService();
 }
 if(modeRef.current==='A'){
 setTimeout(()=>startHce(),200);
-setTimeout(()=>{rtc.current?.createOffer();},500);
+setTimeout(()=>{if(ws.current===s&&s.readyState===1)rtc.current?.createOffer();},500);
 }
 else if(modeRef.current==='B')setTimeout(()=>connectCard(),200);
 };
 s.onclose=()=>{
+if(ws.current!==s)return;
+rtc.current?.close();
+rtc.current=null;
 setSt('disconnected');ws.current=null;
 addLog('Server disconnected',C.c4);
 if(autoRestartRef.current)setTimeout(()=>connect(),3000);
 };
-s.onerror=()=>{setSt('disconnected');ws.current=null;};
+s.onerror=()=>{
+if(ws.current!==s)return;
+setSt('disconnected');
+};
 s.onmessage=(e)=>{
 try{
 const m=JSON.parse(e.data);
 switch(m.type){
+case 'webrtc_full_reset_request':
+if(modeRef.current==='A' && rtc.current) {
+  rtc.current=rtc.current.createFreshConnection();
+  rtc.current.createFullResetOffer();
+}
+break;
+case 'ice_restart_request':
+if(modeRef.current==='A')rtc.current?.restartIce();
+break;
 case 'offer':
-rtc.current?.handleOffer(m.offer);
+if(modeRef.current==='B' && rtc.current &&
+   (m.fullReset || (m.sessionId && rtc.current.sessionId &&
+                    m.sessionId!==rtc.current.sessionId)))
+  rtc.current=rtc.current.createFreshConnection();
+rtc.current?.handleOffer(m.offer, m.sessionId);
 break;
 case 'answer':
+if(m.sessionId && rtc.current?.sessionId !== m.sessionId) break;
 rtc.current?.handleAnswer(m.answer);
 break;
 case 'ice':
-rtc.current?.handleIce(m.candidate);
+if(!rtc.current) break;
+if(m.sessionId && rtc.current.sessionId !== m.sessionId){
+  if(modeRef.current==='B')
+    rtc.current.pendingIce.push({candidate:m.candidate,sessionId:m.sessionId});
+  break;
+}
+rtc.current.handleIce(m.candidate);
 break;
 case 'CONNECTED':setMyId(m.clientId);myIdRef.current=m.clientId;break;
 case 'SERVER_STATE':case 'CLIENTS_LIST':
@@ -704,12 +781,12 @@ return(
 <View style={{width:1,height:16,backgroundColor:C.b1,marginHorizontal:12}}/>
 <View style={[s.statusDot,{backgroundColor:otherConnected?C.c3:C.c4}]}/>
 <Text style={[s.statusTxt,{color:otherConnected?C.c3:C.c4}]}>{mode==='A'?'TEL B':'TEL A'} {otherConnected?'✅':'❌'}</Text>
-{mode==='A'&&(<>
-<View style={{width:1,height:16,backgroundColor:C.b1,marginHorizontal:12}}/>
-<View style={[s.statusDot,{backgroundColor:remoteCardOk?C.c3:C.c4}]}/>
-<Text style={[s.statusTxt,{color:remoteCardOk?C.c3:C.c4}]}>{remoteCardOk?'CARD B ✅':'CARD B ❌'}</Text>
-</>)}
 </View>
+{mode==='A'&&(
+<View style={[s.statusBar,{justifyContent:'center',paddingVertical:8}]}>
+<View style={[s.statusDot,{width:16,height:16,borderRadius:8,marginRight:8,backgroundColor:remoteCardOk?C.c3:C.c4}]}/>
+<Text style={[s.statusTxt,{fontSize:18,color:remoteCardOk?C.c3:C.c4}]}>{remoteCardOk?'CARD B ✅':'CARD B ❌'}</Text>
+</View>) }
 {dataLogOpen&&(
   <View style={{
     position:'absolute',top:0,bottom:0,left:0,right:0,
@@ -750,7 +827,7 @@ disabled={st!=='connected'}>
 </View>
 <View style={s.logBox}>
 {logs.length===0?<Text style={s.empty}>Nicio activitate</Text>:logs.slice(0,30).map((l,i)=>(
-<Text key={i} style={[s.logRow,{color:l.color}]}>{fT(l.ts)} {l.msg}</Text>
+<Text key={i} style={[s.logRow,{color:l.color},/Phone B card (connected|disconnected)/i.test(l.msg)&&{fontSize:20,lineHeight:28}]}>{fT(l.ts)} {l.msg}</Text>
 ))}
 </View>
 </View>

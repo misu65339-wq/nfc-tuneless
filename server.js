@@ -121,7 +121,9 @@ wss.on('connection', (ws) => {
 
       case 'offer':
       case 'answer':
-      case 'ice': {
+      case 'ice':
+      case 'webrtc_full_reset_request':
+      case 'ice_restart_request': {
         // WebRTC signaling: trimite mesajul către celelalte telefoane conectate
         broadcast({
           ...msg,
